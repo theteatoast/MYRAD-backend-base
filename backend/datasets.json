@@ -1,1 +1,9 @@
-{}
+{
+  "0x74213dec3fde20fcb0a3fc20c4c673fc0092ac7a": {
+    "symbol": "PROD",
+    "cid": "bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34",
+    "bonding_curve": "0x91fe4e55adce33ed1b003d0cf361d0118a9bf7dd",
+    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
+    "timestamp": 1760715591453
+  }
+}
