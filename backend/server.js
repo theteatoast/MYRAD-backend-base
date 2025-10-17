@@ -3,9 +3,19 @@ const fs = require("fs");
 const path = require("path");
 const { PORT, DATASETS_FILE, DB_FILE } = require("./config");
 const { ethers } = require("ethers");
+const multer = require("multer");
+const { uploadBase64ToLighthouse } = require("./uploadService");
+
 const app = express();
 
-app.use(express.json());
+// Configure multer for file upload (10MB limit)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(express.static(path.join(__dirname, "../frontend")));
 
 const BONDING_CURVE_ABI = [
