@@ -4,7 +4,6 @@ const path = require("path");
 
 require("dotenv").config();
 
-// Initialize hardhat runtime (required for artifacts)
 let hre;
 try {
   hre = require("hardhat");
@@ -15,12 +14,12 @@ try {
 const DATASETS_FILE = path.join(__dirname, "datasets.json");
 
 /**
- * Create a DataCoin token with bonding curve using uploaded file CID
+ * Create a DataCoin token and initialize USDC pool in marketplace
  * @param {string} cid - IPFS CID of uploaded file
  * @param {string} name - Dataset name
  * @param {string} symbol - Token symbol
  * @param {string} description - Dataset description
- * @returns {Promise<Object>} - Token and curve addresses
+ * @returns {Promise<Object>} - Token, marketplace, and pool info
  */
 async function createDatasetToken(cid, name, symbol, description) {
   try {
@@ -29,6 +28,11 @@ async function createDatasetToken(cid, name, symbol, description) {
     );
     const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
     const platformWallet = process.env.MYRAD_TREASURY || wallet.address;
+    const marketplaceAddr = process.env.MARKETPLACE_ADDRESS;
+
+    if (!marketplaceAddr || marketplaceAddr === "0x0000000000000000000000000000000000000000") {
+      throw new Error("MARKETPLACE_ADDRESS not configured - deploy marketplace first");
+    }
 
     console.log(`\n🚀 Creating dataset token: ${name} (${symbol})`);
     console.log(`   Uploader: ${wallet.address}`);
@@ -37,22 +41,30 @@ async function createDatasetToken(cid, name, symbol, description) {
     let nonce = await provider.getTransactionCount(wallet.address, "latest");
 
     // Load ABIs
-    const factoryArtifact = await hre.artifacts.readArtifact("DataCoinFactory");
     const tokenArtifact = await hre.artifacts.readArtifact("DataCoin");
-    const curveArtifact = await hre.artifacts.readArtifact("BondingCurve");
+    const factoryArtifact = await hre.artifacts.readArtifact("DataCoinFactory");
+    const marketplaceArtifact = await hre.artifacts.readArtifact("DataTokenMarketplace");
+    const usdcArtifact = {
+      abi: [
+        "function approve(address spender, uint256 amount) external returns (bool)",
+        "function balanceOf(address account) external view returns (uint256)",
+        "function decimals() external view returns (uint8)"
+      ]
+    };
 
-    // Get factory address from env
     const factoryAddr = process.env.FACTORY_ADDRESS;
     if (!factoryAddr) {
       throw new Error("FACTORY_ADDRESS not set in environment");
     }
 
-    // Token parameters
+    // Token parameters (90/5/5 split)
     const TOTAL_SUPPLY = ethers.parseUnits("1000000", 18);
     const CREATOR_ALLOCATION = (TOTAL_SUPPLY * 5n) / 100n;
     const PLATFORM_ALLOCATION = (TOTAL_SUPPLY * 5n) / 100n;
     const LIQUIDITY_ALLOCATION = (TOTAL_SUPPLY * 90n) / 100n;
-    const INITIAL_LIQUIDITY_ETH = ethers.parseEther("0.005");
+
+    // USDC parameters (6 decimals)
+    const INITIAL_USDC_LIQUIDITY = ethers.parseUnits("1", 6); // 1 USDC for liquidity
 
     // Step 1: Create token via factory
     console.log(`\n💰 Step 1: Creating token...`);
@@ -78,24 +90,22 @@ async function createDatasetToken(cid, name, symbol, description) {
       "event DataCoinCreated(address indexed creator, address indexed dataCoinAddress, address indexed bondingCurveAddress, string symbol, string cid)",
     ]);
 
-    let tokenAddr, curveAddr;
+    let tokenAddr;
     for (const log of receiptCreate.logs) {
       try {
         const parsed = iface.parseLog(log);
-        if (parsed.name === "DataCoinCreated") {
+        if (parsed && parsed.name === "DataCoinCreated") {
           tokenAddr = parsed.args.dataCoinAddress;
-          curveAddr = parsed.args.bondingCurveAddress;
           break;
         }
       } catch {}
     }
 
-    if (!tokenAddr || !curveAddr) {
+    if (!tokenAddr) {
       throw new Error("Failed to parse DataCoinCreated event");
     }
 
     console.log(`   ✅ Token: ${tokenAddr}`);
-    console.log(`   ✅ Curve: ${curveAddr}`);
 
     // Step 2: Distribute allocations via transfer (all tokens minted to creator in constructor)
     console.log(`\n💳 Step 2: Distributing token allocations...`);
@@ -112,15 +122,15 @@ async function createDatasetToken(cid, name, symbol, description) {
       `   ✅ Platform: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)} tokens`
     );
 
-    // Transfer curve allocation
-    const txCurveTransfer = await token.transfer(
-      curveAddr,
+    // Transfer marketplace allocation
+    const txMarketplaceTransfer = await token.transfer(
+      ethers.getAddress(marketplaceAddr),
       LIQUIDITY_ALLOCATION,
       { nonce: nonce++ }
     );
-    await txCurveTransfer.wait();
+    await txMarketplaceTransfer.wait();
     console.log(
-      `   ✅ Curve: ${ethers.formatUnits(LIQUIDITY_ALLOCATION, 18)} tokens`
+      `   ✅ Marketplace pool: ${ethers.formatUnits(LIQUIDITY_ALLOCATION, 18)} tokens`
     );
 
     // Creator keeps remaining allocation
@@ -129,35 +139,75 @@ async function createDatasetToken(cid, name, symbol, description) {
       `   ✅ Creator: ${ethers.formatUnits(creatorBalance, 18)} tokens`
     );
 
-    // Step 3: Provide initial liquidity
-    console.log(`\n💧 Step 3: Initializing bonding curve liquidity...`);
-    const txLiquidity = await wallet.sendTransaction({
-      to: curveAddr,
-      value: INITIAL_LIQUIDITY_ETH,
-      nonce: nonce++,
-    });
-    const receiptLiquidity = await txLiquidity.wait();
-    if (!receiptLiquidity) {
-      throw new Error("ETH transfer to curve failed - no receipt");
-    }
-    console.log(
-      `   ✅ Sent ${ethers.formatEther(INITIAL_LIQUIDITY_ETH)} ETH to curve`
+    // Step 3: Initialize pool in marketplace with USDC
+    console.log(`\n💧 Step 3: Initializing USDC liquidity pool...`);
+
+    const usdc = new ethers.Contract(
+      process.env.BASE_SEPOLIA_USDC,
+      usdcArtifact.abi,
+      wallet
     );
-    console.log(`   TX: ${receiptLiquidity.hash}`);
 
-    // Verify curve state
+    // Check USDC balance
+    const usdcBalance = await usdc.balanceOf(wallet.address);
+    console.log(`   USDC balance: ${ethers.formatUnits(usdcBalance, 6)} USDC`);
+
+    if (usdcBalance < INITIAL_USDC_LIQUIDITY) {
+      throw new Error(
+        `Insufficient USDC. Need ${ethers.formatUnits(INITIAL_USDC_LIQUIDITY, 6)} but have ${ethers.formatUnits(usdcBalance, 6)}`
+      );
+    }
+
+    // Approve token spending by marketplace
+    const marketplace = new ethers.Contract(
+      marketplaceAddr,
+      marketplaceArtifact.abi,
+      wallet
+    );
+
+    const approveTx1 = await token.approve(
+      marketplaceAddr,
+      LIQUIDITY_ALLOCATION,
+      { nonce: nonce++ }
+    );
+    await approveTx1.wait();
+    console.log(`   ✅ Approved tokens to marketplace`);
+
+    // Approve USDC spending by marketplace
+    const approveTx2 = await usdc.approve(
+      marketplaceAddr,
+      INITIAL_USDC_LIQUIDITY,
+      { nonce: nonce++ }
+    );
+    await approveTx2.wait();
+    console.log(`   ✅ Approved USDC to marketplace`);
+
+    // Initialize pool
+    const txPool = await marketplace.initPool(
+      tokenAddr,
+      wallet.address,
+      LIQUIDITY_ALLOCATION,
+      INITIAL_USDC_LIQUIDITY,
+      { nonce: nonce++ }
+    );
+    const receiptPool = await txPool.wait();
+    if (!receiptPool) {
+      throw new Error("Pool initialization failed");
+    }
+    console.log(`   ✅ Pool initialized`);
+    console.log(`   TX: ${receiptPool.hash}`);
+
+    // Verify pool state
     try {
-      const curve = new ethers.Contract(curveAddr, curveArtifact.abi, provider);
-      const ethBal = await curve.ethBalance();
-      const tokenBal = await token.balanceOf(curveAddr);
-      const price = await curve.getPrice();
+      const [rToken, rUSDC] = await marketplace.getReserves(tokenAddr);
+      const price = await marketplace.getPriceUSDCperToken(tokenAddr);
 
-      console.log(`\n📊 Bonding Curve State:`);
-      console.log(`   ETH: ${ethers.formatEther(ethBal)} ETH`);
-      console.log(`   Tokens: ${ethers.formatUnits(tokenBal, 18)}`);
-      console.log(`   Price: ${ethers.formatUnits(price, 18)} ETH/token`);
+      console.log(`\n📊 Liquidity Pool State:`);
+      console.log(`   Token: ${ethers.formatUnits(rToken, 18)}`);
+      console.log(`   USDC: ${ethers.formatUnits(rUSDC, 6)} USDC`);
+      console.log(`   Price: ${ethers.formatUnits(price, 18)} USDC/token`);
     } catch (err) {
-      console.warn(`   ⚠️  Could not verify curve state: ${err.message}`);
+      console.warn(`   ⚠️  Could not verify pool state: ${err.message}`);
     }
 
     // Step 4: Update backend registry
@@ -169,7 +219,8 @@ async function createDatasetToken(cid, name, symbol, description) {
     data[tokenAddr.toLowerCase()] = {
       symbol: symbol,
       cid: cid,
-      bonding_curve: curveAddr.toLowerCase(),
+      token_address: tokenAddr.toLowerCase(),
+      marketplace_address: marketplaceAddr.toLowerCase(),
       creator: wallet.address.toLowerCase(),
       name: name,
       description: description,
@@ -181,14 +232,14 @@ async function createDatasetToken(cid, name, symbol, description) {
 
     console.log(`\n✅ Dataset created successfully!`);
     console.log(`   Token: ${tokenAddr}`);
-    console.log(`   Curve: ${curveAddr}`);
+    console.log(`   Marketplace: ${marketplaceAddr}`);
     console.log(
       `   Explorer: https://sepolia.basescan.org/address/${tokenAddr}`
     );
 
     return {
       tokenAddress: tokenAddr,
-      curveAddress: curveAddr,
+      marketplaceAddress: marketplaceAddr,
       symbol: symbol,
       name: name,
       cid: cid,
