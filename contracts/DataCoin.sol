@@ -16,9 +16,9 @@ contract DataCoin is ERC20 {
     ) ERC20(name_, symbol_) {
         creator = creator_;
         datasetCid = cid_;
-        // Mint all tokens at once - no separate mint calls needed
+        // Mint all tokens to creator
         if (totalSupply_ > 0) {
-            _mint(msg.sender, totalSupply_);
+            _mint(creator_, totalSupply_);
         }
     }
 
