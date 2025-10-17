@@ -1,18 +1,1 @@
-{
-  "0xe6bfcecb8340239f87fe4d2b873dd2069de04d7d": {
-    "symbol": "WORK",
-    "cid": "bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34",
-    "bonding_curve": "0x2492f4f933f6da831a98b7233f2def7fca8c72ba",
-    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
-    "timestamp": 1760717186142
-  },
-  "0x887fedca63d8f4a86f0bd65f9e4116b45b846b03": {
-    "symbol": "KOMEDI",
-    "cid": "bafkreidalzebf3rc67xmcjhgezqf5nqr65lycih2a5sinpcowajnbhr6ca",
-    "bonding_curve": "0xf16ac6bc737eeb06f7939f3b741d4103af2f3ed6",
-    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
-    "name": "Komedi Dataset",
-    "description": "K",
-    "timestamp": 1760718823806
-  }
-}
+{}
