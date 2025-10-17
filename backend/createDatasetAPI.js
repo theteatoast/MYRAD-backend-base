@@ -97,42 +97,40 @@ async function createDatasetToken(cid, name, symbol, description) {
     console.log(`   ✅ Token: ${tokenAddr}`);
     console.log(`   ✅ Curve: ${curveAddr}`);
 
-    // Step 2: Mint allocations
-    console.log(`\n💳 Step 2: Minting allocations...`);
+    // Step 2: Distribute allocations via transfer (all tokens minted to creator in constructor)
+    console.log(`\n💳 Step 2: Distributing token allocations...`);
     const token = new ethers.Contract(tokenAddr, tokenArtifact.abi, wallet);
 
-    const txCreatorMint = await token.mint(
-      wallet.address,
-      CREATOR_ALLOCATION,
-      { nonce: nonce++ }
-    );
-    await txCreatorMint.wait();
-    console.log(
-      `   ✅ Creator: ${ethers.formatUnits(CREATOR_ALLOCATION, 18)} tokens`
-    );
-
-    const txPlatformMint = await token.mint(
+    // Transfer platform allocation
+    const txPlatformTransfer = await token.transfer(
       ethers.getAddress(platformWallet),
       PLATFORM_ALLOCATION,
       { nonce: nonce++ }
     );
-    await txPlatformMint.wait();
+    await txPlatformTransfer.wait();
     console.log(
-      `   ��� Platform: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)} tokens`
+      `   ✅ Platform: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)} tokens`
     );
 
-    const txCurveMint = await token.mint(
+    // Transfer curve allocation
+    const txCurveTransfer = await token.transfer(
       curveAddr,
       LIQUIDITY_ALLOCATION,
       { nonce: nonce++ }
     );
-    await txCurveMint.wait();
+    await txCurveTransfer.wait();
     console.log(
       `   ✅ Curve: ${ethers.formatUnits(LIQUIDITY_ALLOCATION, 18)} tokens`
     );
 
+    // Creator keeps remaining allocation
+    const creatorBalance = await token.balanceOf(wallet.address);
+    console.log(
+      `   ✅ Creator: ${ethers.formatUnits(creatorBalance, 18)} tokens`
+    );
+
     // Step 3: Provide initial liquidity
-    console.log(`\n💧 Step 3: Initializing liquidity...`);
+    console.log(`\n💧 Step 3: Initializing bonding curve liquidity...`);
     const txLiquidity = await wallet.sendTransaction({
       to: curveAddr,
       value: INITIAL_LIQUIDITY_ETH,
@@ -140,19 +138,23 @@ async function createDatasetToken(cid, name, symbol, description) {
     });
     await txLiquidity.wait();
     console.log(
-      `   ✅ Sent ${ethers.formatEther(INITIAL_LIQUIDITY_ETH)} ETH`
+      `   ✅ Sent ${ethers.formatEther(INITIAL_LIQUIDITY_ETH)} ETH to curve`
     );
 
     // Verify curve state
-    const curve = new ethers.Contract(curveAddr, curveArtifact.abi, provider);
-    const ethBal = await curve.ethBalance();
-    const tokenBal = await token.balanceOf(curveAddr);
-    const price = await curve.getPrice();
+    try {
+      const curve = new ethers.Contract(curveAddr, curveArtifact.abi, provider);
+      const ethBal = await curve.ethBalance();
+      const tokenBal = await token.balanceOf(curveAddr);
+      const price = await curve.getPrice();
 
-    console.log(`\n📊 Bonding Curve State:`);
-    console.log(`   ETH: ${ethers.formatEther(ethBal)} ETH`);
-    console.log(`   Tokens: ${ethers.formatUnits(tokenBal, 18)}`);
-    console.log(`   Price: ${ethers.formatUnits(price, 18)} ETH/token`);
+      console.log(`\n📊 Bonding Curve State:`);
+      console.log(`   ETH: ${ethers.formatEther(ethBal)} ETH`);
+      console.log(`   Tokens: ${ethers.formatUnits(tokenBal, 18)}`);
+      console.log(`   Price: ${ethers.formatUnits(price, 18)} ETH/token`);
+    } catch (err) {
+      console.warn(`   ⚠️  Could not verify curve state: ${err.message}`);
+    }
 
     // Step 4: Update backend registry
     console.log(`\n📁 Step 4: Updating registry...`);
