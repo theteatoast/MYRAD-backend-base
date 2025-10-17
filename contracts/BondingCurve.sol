@@ -116,6 +116,14 @@ contract BondingCurve is ReentrancyGuard {
         emit Sell(msg.sender, tokenAmount, ethToReceive);
     }
 
+    function ethBalance() external view returns (uint256) {
+        return address(this).balance;
+    }
+
+    function tokenSupply() external view returns (uint256) {
+        return token.balanceOf(address(this));
+    }
+
     function getBalance() external view returns (uint256) {
         return address(this).balance;
     }
