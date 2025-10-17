@@ -5,6 +5,7 @@ const { PORT, DATASETS_FILE, DB_FILE } = require("./config");
 const { ethers } = require("ethers");
 const multer = require("multer");
 const { uploadBase64ToLighthouse } = require("./uploadService");
+const { createDatasetToken } = require("./createDatasetAPI");
 
 const app = express();
 
