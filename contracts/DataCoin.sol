@@ -15,9 +15,7 @@ contract DataCoin is ERC20, AccessControl {
         address creator_,
         string memory cid_
     ) ERC20(name_, symbol_) {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);  // factory is admin
-        _grantRole(MINTER_ROLE, msg.sender);         // factory can mint
-        _grantRole(DEFAULT_ADMIN_ROLE, creator_);    // creator is also admin
+        _grantRole(DEFAULT_ADMIN_ROLE, creator_);    // creator is admin
         _grantRole(MINTER_ROLE, creator_);           // creator can mint
         datasetCid = cid_;
         if (initialSupply_ > 0) {
