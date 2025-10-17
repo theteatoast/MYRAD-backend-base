@@ -23,6 +23,20 @@ contract BondingCurve is ReentrancyGuard {
         tokenSupply = 0;
     }
 
+    // Initialize bonding curve with initial token balance and ETH
+    function initialize(uint256 initialTokens) external {
+        require(msg.sender == creator, "Only creator can initialize");
+        require(tokenSupply == 0, "Already initialized");
+
+        uint256 contractTokenBalance = token.balanceOf(address(this));
+        require(contractTokenBalance >= initialTokens, "Insufficient tokens in contract");
+
+        tokenSupply = initialTokens;
+        ethBalance = address(this).balance;
+
+        require(tokenSupply > 0 && ethBalance > 0, "Need tokens and ETH for initialization");
+    }
+
     function getPrice() public view returns (uint256) {
         if (tokenSupply == 0) return 0;
         return (ethBalance * 1e18) / tokenSupply;
