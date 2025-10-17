@@ -112,7 +112,11 @@ if (provider instanceof ethers.WebSocketProvider) {
           console.log("👀 WS subscribing new token:", addr, meta.symbol);
           contract.on("Transfer", (from, to, value, event) => {
             try {
-              if (to === ethers.ZeroAddress) handleRedeemOrBurn(addr, from, value, meta.symbol);
+              const toAddr = typeof to === 'string' ? to.toLowerCase() : ethers.getAddress(to).toLowerCase();
+              if (toAddr === ethers.ZeroAddress.toLowerCase()) {
+                console.log(`🔥 Transfer burn detected (WS new token): ${from} burned ${ethers.formatUnits(value, 18)}`);
+                handleRedeemOrBurn(addr, from, value, meta.symbol);
+              }
             } catch (e) { console.error(e); }
           });
           contract.on("Redeemed", (user, amount, ticker, event) => {
