@@ -463,18 +463,33 @@
           }),
         });
 
-        let data;
-        try {
-          data = await response.json();
-        } catch (parseErr) {
-          console.error("Failed to parse response:", parseErr);
-          showStatus(`Server error: Unable to parse response`, "error");
+        // Get response text first, then parse only if needed
+        const responseText = await response.text();
+        console.log("Server response status:", response.status);
+        console.log("Server response text:", responseText);
+
+        let data = {};
+        if (responseText) {
+          try {
+            data = JSON.parse(responseText);
+          } catch (parseErr) {
+            console.error("Failed to parse response:", parseErr, "Raw:", responseText);
+            showStatus(`Server error: Invalid response format`, "error");
+            submitBtn.disabled = false;
+            return;
+          }
+        }
+
+        if (!response.ok) {
+          const errorMsg = data.error || data.message || `Server error (${response.status})`;
+          showStatus(`Creation failed: ${errorMsg}`, "error");
           submitBtn.disabled = false;
           return;
         }
 
-        if (!response.ok) {
-          showStatus(`Creation failed: ${data.error || data.message || "Unknown error"}`, "error");
+        if (!data.tokenAddress) {
+          console.error("No token address in response:", data);
+          showStatus(`Creation failed: No token address returned`, "error");
           submitBtn.disabled = false;
           return;
         }
@@ -489,6 +504,7 @@
           window.location.href = "index.html";
         }, 2000);
       } catch (err) {
+        console.error("Creation error:", err);
         showStatus(`Error: ${err.message}`, "error");
         submitBtn.disabled = false;
       }
