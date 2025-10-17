@@ -154,10 +154,10 @@ if (provider instanceof ethers.WebSocketProvider) {
         // for each token, query logs from lastBlock+1 .. latest
         const from = lastBlock + 1;
         const to = latest;
-        // topics for Transfer and Redeemed
+        // topics for Transfer and Redeemed (using ethers.js v6 method)
         const iface = new ethers.Interface(ERC20_ABI.concat(REDEEMED_ABI));
-        const transferTopic = iface.getEventTopic("Transfer");
-        const redeemedTopic = iface.getEventTopic("Redeemed");
+        const transferTopic = ethers.id("Transfer(address,address,uint256)");
+        const redeemedTopic = ethers.id("Redeemed(address,uint256,string)");
 
         for (const addr of tokenAddrs) {
           const token = addr.toLowerCase();
