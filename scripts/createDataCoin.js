@@ -109,21 +109,24 @@ async function main() {
   console.log(`   ✅ DataCoin deployed at: ${tokenAddr}`);
   console.log(`   ✅ BondingCurve deployed at: ${curveAddr}`);
 
-  // Step 2: Mint token allocations
-  console.log(`\n💰 Step 2: Minting token allocations`);
+  // Step 2: Distribute token allocations
+  console.log(`\n💰 Step 2: Distributing token allocations`);
 
   const token = new ethers.Contract(tokenAddr, tokenArtifact.abi, wallet);
+  const ERC20_ABI = ["function transfer(address to, uint256 amount) returns (bool)"];
+  const tokenTransfer = new ethers.Contract(tokenAddr, ERC20_ABI, wallet);
 
-  const txCreatorMint = await token.mint(wallet.address, CREATOR_ALLOCATION, { nonce: nonce++ });
-  await txCreatorMint.wait();
-  console.log(`   ✅ Creator allocation: ${ethers.formatUnits(CREATOR_ALLOCATION, 18)} tokens`);
+  // Creator allocation already has CREATOR_ALLOCATION (50k), keep it
+  console.log(`   ✅ Creator allocation: ${ethers.formatUnits(CREATOR_ALLOCATION, 18)} tokens (kept by creator)`);
 
-  const txPlatformMint = await token.mint(ethers.getAddress(platformWallet), PLATFORM_ALLOCATION, { nonce: nonce++ });
-  await txPlatformMint.wait();
+  // Transfer to platform
+  const txPlatform = await tokenTransfer.transfer(ethers.getAddress(platformWallet), PLATFORM_ALLOCATION, { nonce: nonce++ });
+  await txPlatform.wait();
   console.log(`   ✅ Platform allocation: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)} tokens`);
 
-  const txCurveMint = await token.mint(curveAddr, LIQUIDITY_ALLOCATION, { nonce: nonce++ });
-  await txCurveMint.wait();
+  // Transfer to bonding curve
+  const txCurve = await tokenTransfer.transfer(curveAddr, LIQUIDITY_ALLOCATION, { nonce: nonce++ });
+  await txCurve.wait();
   console.log(`   ✅ Bonding curve allocation: ${ethers.formatUnits(LIQUIDITY_ALLOCATION, 18)} tokens`);
 
   // Step 3: Provide initial liquidity to bonding curve
