@@ -33,24 +33,16 @@ contract BondingCurve is ReentrancyGuard {
         uint256 tokenBal = token.balanceOf(address(this));
         uint256 ethBal = address(this).balance;
 
-        // Handle empty curve - simple 1:1 initialization
+        // Must have tokens and ETH in curve to trade
         if (tokenBal == 0 || ethBal == 0) {
-            return ethAmount * 100;  // 1 ETH = 100 tokens initially
+            return 0;
         }
 
         // Linear bonding curve: price = ethBalance / tokenSupply
-        // When buying: tokens received = ethAmount / avgPrice
-        // avgPrice = (currentPrice + futurePrice) / 2
-        // currentPrice = ethBal / tokenBal
-        // futurePrice = (ethBal + ethAmount) / (tokenBal + tokensReceived)
-        // This simplifies to: tokensReceived ≈ ethAmount * tokenBal / (ethBal + ethAmount/2)
-
-        // Simple linear formula: tokens = ethAmount * currentSupply / currentBalance
-        // This avoids complex math and division by zero issues
+        // tokens received = ethAmount * tokenBalance / ethBalance
         uint256 tokensOut = (ethAmount * tokenBal) / ethBal;
-        
-        // Add margin for price increase (return fewer tokens to account for price moving up)
-        // Discount by ~10% to create mild slippage
+
+        // Apply slippage (10%) when buying to account for price impact
         tokensOut = (tokensOut * 9) / 10;
 
         return tokensOut;
