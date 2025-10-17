@@ -1,1 +1,9 @@
-{}
+{
+  "0xe6bfcecb8340239f87fe4d2b873dd2069de04d7d": {
+    "symbol": "WORK",
+    "cid": "bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34",
+    "bonding_curve": "0x2492f4f933f6da831a98b7233f2def7fca8c72ba",
+    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
+    "timestamp": 1760717186142
+  }
+}
