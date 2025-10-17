@@ -452,33 +452,47 @@
       showStatus("Creating dataset token...", "info");
 
       try {
+        submitBtn.disabled = true;
+        showStatus("Creating dataset token on blockchain...", "info");
+
+        const payload = {
+          cid: uploadedCid,
+          name: document.getElementById("datasetName").value,
+          symbol: document.getElementById("tokenSymbol").value,
+          description: document.getElementById("description").value,
+        };
+
+        console.log("Sending payload:", payload);
+
         const response = await fetch("/create-dataset", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            cid: uploadedCid,
-            name: document.getElementById("datasetName").value,
-            symbol: document.getElementById("tokenSymbol").value,
-            description: document.getElementById("description").value,
-          }),
+          body: JSON.stringify(payload),
         });
 
-        // Get response text first, then parse only if needed
-        const responseText = await response.text();
-        console.log("Server response status:", response.status);
-        console.log("Server response text:", responseText);
+        console.log("Response received. Status:", response.status);
+
+        // Clone the response to avoid stream issues
+        const clonedResponse = response.clone();
 
         let data = {};
-        if (responseText) {
-          try {
+        let responseText = "";
+
+        try {
+          responseText = await response.text();
+          if (responseText) {
             data = JSON.parse(responseText);
-          } catch (parseErr) {
-            console.error("Failed to parse response:", parseErr, "Raw:", responseText);
-            showStatus(`Server error: Invalid response format`, "error");
-            submitBtn.disabled = false;
-            return;
           }
+        } catch (err) {
+          console.error("Error parsing response:", err);
+          console.log("Raw response text:", responseText);
+          showStatus(`Server error: Invalid response from server`, "error");
+          submitBtn.disabled = false;
+          return;
         }
+
+        console.log("Parsed data:", data);
+        console.log("Response ok:", response.ok);
 
         if (!response.ok) {
           const errorMsg = data.error || data.message || `Server error (${response.status})`;
@@ -505,6 +519,7 @@
         }, 2000);
       } catch (err) {
         console.error("Creation error:", err);
+        console.error("Error stack:", err.stack);
         showStatus(`Error: ${err.message}`, "error");
         submitBtn.disabled = false;
       }
