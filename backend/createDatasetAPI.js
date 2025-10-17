@@ -136,10 +136,14 @@ async function createDatasetToken(cid, name, symbol, description) {
       value: INITIAL_LIQUIDITY_ETH,
       nonce: nonce++,
     });
-    await txLiquidity.wait();
+    const receiptLiquidity = await txLiquidity.wait();
+    if (!receiptLiquidity) {
+      throw new Error("ETH transfer to curve failed - no receipt");
+    }
     console.log(
       `   ✅ Sent ${ethers.formatEther(INITIAL_LIQUIDITY_ETH)} ETH to curve`
     );
+    console.log(`   TX: ${receiptLiquidity.hash}`);
 
     // Verify curve state
     try {
