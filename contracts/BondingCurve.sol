@@ -32,6 +32,13 @@ contract BondingCurve is ReentrancyGuard {
         if (ethSpent == 0) return 0;
 
         uint256 currentPrice = getPrice();
+
+        // Handle initial buy when price is 0
+        if (currentPrice == 0) {
+            // Initial buy: 1 token = 1 wei initially
+            return ethSpent * 1e18;
+        }
+
         uint256 newPrice = ((ethBalance + ethSpent) * 1e18) / (tokenSupply + ethSpent / currentPrice);
 
         uint256 priceIncrease = newPrice - currentPrice;
