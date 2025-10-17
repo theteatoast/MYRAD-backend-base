@@ -148,41 +148,67 @@ async function createDatasetToken(cid, name, symbol, description) {
       wallet
     );
 
-    // Check USDC balance
-    const usdcBalance = await usdc.balanceOf(wallet.address);
-    console.log(`   USDC balance: ${ethers.formatUnits(usdcBalance, 6)} USDC`);
-
-    if (usdcBalance < INITIAL_USDC_LIQUIDITY) {
-      throw new Error(
-        `Insufficient USDC. Need ${ethers.formatUnits(INITIAL_USDC_LIQUIDITY, 6)} but have ${ethers.formatUnits(usdcBalance, 6)}`
-      );
-    }
-
-    // Approve token spending by marketplace
     const marketplace = new ethers.Contract(
       marketplaceAddr,
       marketplaceArtifact.abi,
       wallet
     );
 
+    // Check if pool already exists to prevent duplicate initialization
+    try {
+      const poolExists = await marketplace.poolExists(tokenAddr);
+      if (poolExists) {
+        console.log(`   ⚠️  Pool already exists for this token, skipping initialization`);
+        return {
+          tokenAddress: tokenAddr,
+          marketplaceAddress: marketplaceAddr,
+          symbol: symbol,
+          name: name,
+          cid: cid,
+        };
+      }
+    } catch (err) {
+      console.log(`   ℹ️  Could not check pool existence, proceeding...`);
+    }
+
+    // Check USDC balance
+    const usdcBalance = await usdc.balanceOf(wallet.address);
+    console.log(`   USDC balance: ${ethers.formatUnits(usdcBalance, 6)} USDC`);
+
+    if (usdcBalance < INITIAL_USDC_LIQUIDITY) {
+      throw new Error(
+        `❌ INSUFFICIENT USDC\n   Need: ${ethers.formatUnits(INITIAL_USDC_LIQUIDITY, 6)} USDC\n   Have: ${ethers.formatUnits(usdcBalance, 6)} USDC\n   Get more USDC from: https://www.superbridge.app/base-sepolia`
+      );
+    }
+
+    // Approve token spending by marketplace (with longer wait)
+    console.log(`   ⏳ Approving tokens...`);
     const approveTx1 = await token.approve(
       marketplaceAddr,
       LIQUIDITY_ALLOCATION,
       { nonce: nonce++ }
     );
     await approveTx1.wait();
-    console.log(`   ✅ Approved tokens to marketplace`);
+    console.log(`   ✅ Tokens approved`);
+
+    // Wait a bit before next transaction to avoid RPC throttling
+    await new Promise(r => setTimeout(r, 2000));
 
     // Approve USDC spending by marketplace
+    console.log(`   ⏳ Approving USDC...`);
     const approveTx2 = await usdc.approve(
       marketplaceAddr,
       INITIAL_USDC_LIQUIDITY,
       { nonce: nonce++ }
     );
     await approveTx2.wait();
-    console.log(`   ✅ Approved USDC to marketplace`);
+    console.log(`   ✅ USDC approved`);
+
+    // Wait a bit before pool initialization
+    await new Promise(r => setTimeout(r, 2000));
 
     // Initialize pool
+    console.log(`   ⏳ Initializing pool...`);
     const txPool = await marketplace.initPool(
       tokenAddr,
       wallet.address,
