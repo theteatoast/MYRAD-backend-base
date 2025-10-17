@@ -139,12 +139,6 @@ async function main() {
   await txLiquidity.wait();
   console.log(`   ✅ Sent ${ethers.formatEther(INITIAL_LIQUIDITY_ETH)} ETH to bonding curve`);
 
-  // Initialize bonding curve state
-  console.log(`   🔧 Initializing bonding curve state...`);
-  const txInit = await curve.initialize(LIQUIDITY_ALLOCATION, { nonce: nonce++ });
-  await txInit.wait();
-  console.log(`   ✅ Bonding curve initialized with balances`);
-
   // Verify bonding curve state
   const ethBal = await provider.getBalance(curveAddr);
   const tokenBal = await token.balanceOf(curveAddr);
@@ -172,7 +166,7 @@ async function main() {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
   console.log(`   ✅ Updated backend/datasets.json`);
 
-  console.log(`\n🎉 Success! Token created and ready to trade`);
+  console.log(`\n��� Success! Token created and ready to trade`);
   console.log(`   Token: ${tokenAddr}`);
   console.log(`   Bonding Curve: ${curveAddr}`);
   console.log(`   Network: Base Sepolia`);
