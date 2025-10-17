@@ -463,10 +463,18 @@
           }),
         });
 
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          console.error("Failed to parse response:", parseErr);
+          showStatus(`Server error: Unable to parse response`, "error");
+          submitBtn.disabled = false;
+          return;
+        }
 
         if (!response.ok) {
-          showStatus(`Creation failed: ${data.error || data.message}`, "error");
+          showStatus(`Creation failed: ${data.error || data.message || "Unknown error"}`, "error");
           submitBtn.disabled = false;
           return;
         }
