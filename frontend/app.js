@@ -175,32 +175,45 @@ async function buyToken(tokenAddr, ethAmountStr, meta) {
 
     if (!provider) provider = new ethers.BrowserProvider(window.ethereum);
 
+    // Verify contract exists
+    const code = await provider.getCode(meta.bonding_curve);
+    if (code === "0x") {
+      STATUS.innerText = "❌ Error: Bonding curve contract not found at address";
+      console.error(`No contract at: ${meta.bonding_curve}`);
+      return;
+    }
+
     const curve = new ethers.Contract(meta.bonding_curve, BONDING_CURVE_ABI, signer);
 
-    const tokensToReceive = await curve.getBuyAmount(ethAmount);
-    if (tokensToReceive === 0n) {
-      STATUS.innerText = "❌ Insufficient liquidity";
-      return;
+    try {
+      const tokensToReceive = await curve.getBuyAmount(ethAmount);
+      if (tokensToReceive === 0n) {
+        STATUS.innerText = "❌ Insufficient liquidity";
+        return;
+      }
+
+      const displayTokens = ethers.formatUnits(tokensToReceive, 18);
+      const confirmed = confirm(`Buy ~${displayTokens} tokens for ${ethAmountStr} ETH?\n\nConfirm?`);
+
+      if (!confirmed) {
+        STATUS.innerText = "Cancelled";
+        return;
+      }
+
+      STATUS.innerText = "⏳ Confirm buy in wallet...";
+
+      const tx = await curve.buy({ value: ethAmount });
+      const receipt = await tx.wait();
+
+      STATUS.innerText = `✅ Buy confirmed! Received ~${displayTokens} tokens`;
+
+      setTimeout(() => {
+        loadDatasets();
+      }, 1000);
+    } catch (callErr) {
+      console.error("Contract call error:", callErr.message);
+      STATUS.innerText = "❌ Contract error: " + callErr.message;
     }
-
-    const displayTokens = ethers.formatUnits(tokensToReceive, 18);
-    const confirmed = confirm(`Buy ~${displayTokens} tokens for ${ethAmountStr} ETH?\n\nConfirm?`);
-
-    if (!confirmed) {
-      STATUS.innerText = "Cancelled";
-      return;
-    }
-
-    STATUS.innerText = "⏳ Confirm buy in wallet...";
-
-    const tx = await curve.buy({ value: ethAmount });
-    const receipt = await tx.wait();
-
-    STATUS.innerText = `✅ Buy confirmed! Received ~${displayTokens} tokens`;
-
-    setTimeout(() => {
-      loadDatasets();
-    }, 1000);
   } catch (err) {
     console.error("Buy error:", err);
     STATUS.innerText = "❌ Buy failed: " + (err?.message || err);
