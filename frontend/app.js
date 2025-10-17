@@ -199,6 +199,18 @@ async function buyToken(tokenAddr, ethAmountStr, meta) {
   if (!signer) return alert("Connect wallet first");
   if (!meta.bonding_curve) return alert("Bonding curve not found");
 
+  // Verify network
+  try {
+    const network = await provider.getNetwork();
+    if (network.chainId !== 84532n) {
+      STATUS.innerText = "❌ Wrong network! Must be on Base Sepolia testnet (84532)";
+      return;
+    }
+  } catch (err) {
+    STATUS.innerText = "❌ Network error: " + err.message;
+    return;
+  }
+
   const ethAmount = ethers.parseEther(String(ethAmountStr));
 
   try {
