@@ -1,33 +1,132 @@
-// backend/server.js
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { PORT, DATASETS_FILE, DB_FILE } = require("./config");
+const { ethers } = require("ethers");
 const app = express();
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../frontend"))); // optional: serve frontend
+app.use(express.static(path.join(__dirname, "../frontend")));
 
-// Return list of available tokens (datasets.json)
+const BONDING_CURVE_ABI = [
+  "function getPrice() public view returns (uint256)",
+  "function ethBalance() public view returns (uint256)",
+  "function tokenSupply() public view returns (uint256)",
+  "function getBuyAmount(uint256 ethSpent) public view returns (uint256)",
+  "function getSellAmount(uint256 tokenAmount) public view returns (uint256)"
+];
+
+const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
+
+app.get("/", (req, res) => {
+  res.send("🚀 MYRAD Backend API running ✅");
+});
+
 app.get("/datasets", (req, res) => {
   if (!fs.existsSync(DATASETS_FILE)) return res.json({});
   const data = JSON.parse(fs.readFileSync(DATASETS_FILE));
   res.json(data);
 });
 
-// Return last access record for a user & symbol
+app.get("/price/:curveAddress", async (req, res) => {
+  try {
+    const { curveAddress } = req.params;
+
+    if (!ethers.isAddress(curveAddress)) {
+      return res.status(400).json({ error: "Invalid address" });
+    }
+
+    const curve = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, provider);
+    const price = await curve.getPrice();
+    const ethBal = await curve.ethBalance();
+    const tokenSupply = await curve.tokenSupply();
+
+    res.json({
+      price: ethers.formatUnits(price, 18),
+      ethBalance: ethers.formatEther(ethBal),
+      tokenSupply: ethers.formatUnits(tokenSupply, 18),
+    });
+  } catch (err) {
+    console.error("Price error:", err);
+    res.status(500).json({ error: "Failed to fetch price" });
+  }
+});
+
+app.get("/quote/buy/:curveAddress/:ethAmount", async (req, res) => {
+  try {
+    const { curveAddress, ethAmount } = req.params;
+
+    if (!ethers.isAddress(curveAddress)) {
+      return res.status(400).json({ error: "Invalid address" });
+    }
+
+    const ethValue = ethers.parseEther(ethAmount);
+    const curve = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, provider);
+    const tokenAmount = await curve.getBuyAmount(ethValue);
+
+    res.json({
+      ethAmount: ethAmount,
+      tokenAmount: ethers.formatUnits(tokenAmount, 18),
+      tokenAmountRaw: tokenAmount.toString(),
+    });
+  } catch (err) {
+    console.error("Buy quote error:", err);
+    res.status(500).json({ error: "Failed to calculate quote" });
+  }
+});
+
+app.get("/quote/sell/:curveAddress/:tokenAmount", async (req, res) => {
+  try {
+    const { curveAddress, tokenAmount } = req.params;
+
+    if (!ethers.isAddress(curveAddress)) {
+      return res.status(400).json({ error: "Invalid address" });
+    }
+
+    const tokenValue = ethers.parseUnits(tokenAmount, 18);
+    const curve = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, provider);
+    const ethAmount = await curve.getSellAmount(tokenValue);
+
+    res.json({
+      tokenAmount: tokenAmount,
+      ethAmount: ethers.formatEther(ethAmount),
+      ethAmountRaw: ethAmount.toString(),
+    });
+  } catch (err) {
+    console.error("Sell quote error:", err);
+    res.status(500).json({ error: "Failed to calculate quote" });
+  }
+});
+
 app.get("/access/:user/:symbol", (req, res) => {
   const { user, symbol } = req.params;
-  if (!fs.existsSync(DB_FILE)) return res.status(404).json({ error: "no redemptions" });
+
+  if (!fs.existsSync(DB_FILE)) {
+    return res.status(404).json({ error: "no redemptions" });
+  }
+
   const db = JSON.parse(fs.readFileSync(DB_FILE));
-  // find most recent matching entry
-  const entry = db.slice().reverse().find(x => x.user.toLowerCase() === user.toLowerCase() && x.symbol === symbol);
-  if (!entry) return res.status(404).json({ error: "not found" });
-  res.json({ user: entry.user, symbol: entry.symbol, download: entry.downloadUrl, ts: entry.ts });
+  const entry = db
+    .slice()
+    .reverse()
+    .find(
+      x =>
+        x.user.toLowerCase() === user.toLowerCase() && x.symbol === symbol
+    );
+
+  if (!entry) {
+    return res.status(404).json({ error: "not found" });
+  }
+
+  res.json({
+    user: entry.user,
+    symbol: entry.symbol,
+    download: entry.downloadUrl,
+    ts: entry.ts,
+  });
 });
 
-app.get("/", (req, res) => {
-  res.send("MYRAD Backend API running ✅");
+app.listen(PORT, () => {
+  console.log(`🚀 Backend API running on port ${PORT}`);
+  console.log(`📊 Open http://localhost:${PORT}`);
 });
-
-app.listen(PORT, () => console.log(`🚀 Backend API running on port ${PORT}`));

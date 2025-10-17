@@ -4,58 +4,76 @@ const path = require("path");
 const { ethers } = require("ethers");
 const hre = require("hardhat");
 
-// ------------------------------------------------------------
-// 🔒 Disable ENS lookups globally (fixes ethers v6 ENS bug)
+// Disable ENS lookups
 const { JsonRpcProvider } = require("ethers");
 if (JsonRpcProvider.prototype.resolveName) {
   JsonRpcProvider.prototype.resolveName = async function (name) {
-    if (ethers.isAddress(name)) return name; // return address directly
+    if (ethers.isAddress(name)) return name;
     throw new Error(`ENS resolution disabled: "${name}"`);
   };
 }
-// ------------------------------------------------------------
 
-// -------- CONFIG ----------
-const UNISWAP_V2_ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
-const UNISWAP_ABI = [
-  "function addLiquidityETH(address token,uint amountTokenDesired,uint amountTokenMin,uint amountETHMin,address to,uint deadline) payable returns (uint,uint,uint)"
-];
+// Platform configuration
+const INITIAL_LIQUIDITY_ETH = ethers.parseEther("0.005"); // ~$5 in ETH
+const TOTAL_SUPPLY = ethers.parseUnits("1000000", 18);
+const CREATOR_ALLOCATION = (TOTAL_SUPPLY * 5n) / 100n; // 5% to creator
+const PLATFORM_ALLOCATION = (TOTAL_SUPPLY * 5n) / 100n; // 5% to platform
+const LIQUIDITY_ALLOCATION = (TOTAL_SUPPLY * 90n) / 100n; // 90% to bonding curve
+
+const HARDCODED_CID = "bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34";
 
 async function main() {
   const argv = process.argv.slice(2);
-  if (argv.length < 5) {
-    console.log(`Usage:
-node scripts/createDataCoin.js <FACTORY_ADDRESS> "<NAME>" "<SYMBOL>" <TOTAL_SUPPLY> "<CID>"`);
+  let tokenName, tokenSymbol;
+
+  if (argv.length === 0) {
+    console.log("Using default values for testing...");
+    tokenName = "Test Dataset";
+    tokenSymbol = "TEST";
+  } else if (argv.length >= 2) {
+    tokenName = String(argv[0]);
+    tokenSymbol = String(argv[1]);
+  } else {
+    console.log("Usage: node scripts/createDataCoin.js [NAME] [SYMBOL]");
+    console.log("Example: node scripts/createDataCoin.js 'Medical Data' 'MDATA'");
     return;
   }
 
-  const [factoryAddr, rawName, rawSymbol, totalRaw, rawCid] = argv;
-  const name = String(rawName);
-  const symbol = String(rawSymbol);
-  const cid = String(rawCid);
-  const totalSupply = ethers.parseUnits(totalRaw, 18);
-
-  // ----- Provider & Wallet -----
   const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
   const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+  const platformWallet = process.env.MYRAD_TREASURY || wallet.address;
 
-  // Track and increment nonce manually (safe mode)
+  console.log("🔧 Configuration:");
+  console.log(`   Deployer: ${wallet.address}`);
+  console.log(`   Platform: ${platformWallet}`);
+  console.log(`   Token: ${tokenName} (${tokenSymbol})`);
+  console.log(`   CID: ${HARDCODED_CID}`);
+  console.log(`   Initial Liquidity: ${ethers.formatEther(INITIAL_LIQUIDITY_ETH)} ETH`);
+
   let nonce = await provider.getTransactionCount(wallet.address, "latest");
-  console.log("ℹ️ Starting nonce:", nonce);
 
   // Load ABIs
   const factoryArtifact = await hre.artifacts.readArtifact("DataCoinFactory");
   const tokenArtifact = await hre.artifacts.readArtifact("DataCoin");
+  const curveArtifact = await hre.artifacts.readArtifact("BondingCurve");
 
-  // ===== 1️⃣ Create token through factory =====
-  console.log(`\n🚀 Creating token via factory at ${factoryAddr}`);
+  // Step 1: Get factory address (you need to deploy it first with: npm run deploy)
+  const factoryAddr = process.env.FACTORY_ADDRESS;
+  if (!factoryAddr) {
+    console.error("❌ FACTORY_ADDRESS not set in .env");
+    console.log("Deploy factory first with: npm run deploy");
+    return;
+  }
+
+  console.log(`\n🚀 Step 1: Creating token via factory at ${factoryAddr}`);
+
   const ifaceFactory = new ethers.Interface(factoryArtifact.abi);
   const calldata = ifaceFactory.encodeFunctionData("createDataCoin", [
-    name,
-    symbol,
-    totalSupply,
+    tokenName,
+    tokenSymbol,
+    TOTAL_SUPPLY,
     0n,
-    cid,
+    HARDCODED_CID,
   ]);
 
   const txCreate = await wallet.sendTransaction({
@@ -64,80 +82,99 @@ node scripts/createDataCoin.js <FACTORY_ADDRESS> "<NAME>" "<SYMBOL>" <TOTAL_SUPP
     nonce: nonce++,
   });
   const receiptCreate = await txCreate.wait();
-  console.log(`📜 Tx confirmed: ${receiptCreate.hash}`);
+  console.log(`   ✅ Tx confirmed: ${receiptCreate.hash}`);
 
-  // ===== Parse DataCoinCreated event =====
+  // Parse DataCoinCreated event
   const iface = new ethers.Interface([
-    "event DataCoinCreated(address indexed creator,address indexed dataCoinAddress,string symbol,string cid)"
+    "event DataCoinCreated(address indexed creator, address indexed dataCoinAddress, address indexed bondingCurveAddress, string symbol, string cid)"
   ]);
-  let tokenAddr;
+
+  let tokenAddr, curveAddr;
   for (const log of receiptCreate.logs) {
     try {
       const parsed = iface.parseLog(log);
       if (parsed.name === "DataCoinCreated") {
         tokenAddr = parsed.args.dataCoinAddress;
+        curveAddr = parsed.args.bondingCurveAddress;
         break;
       }
     } catch {}
   }
 
-  if (!tokenAddr) {
-    console.error("⚠️ Could not find DataCoinCreated event. Check Basescan.");
+  if (!tokenAddr || !curveAddr) {
+    console.error("❌ Could not parse DataCoinCreated event");
     return;
   }
-  console.log("✅ DataCoin deployed at:", tokenAddr);
 
-  // ===== 2️⃣ Mint allocations =====
+  console.log(`   ✅ DataCoin deployed at: ${tokenAddr}`);
+  console.log(`   ✅ BondingCurve deployed at: ${curveAddr}`);
+
+  // Step 2: Mint token allocations
+  console.log(`\n💰 Step 2: Minting token allocations`);
+
   const token = new ethers.Contract(tokenAddr, tokenArtifact.abi, wallet);
-  const total = totalSupply;
-  const creatorAlloc = (total * 80n) / 100n;
-  const treasuryAlloc = (total * 15n) / 100n;
-  const liqAlloc = total - creatorAlloc - treasuryAlloc;
-  const treasury = process.env.MYRAD_TREASURY;
 
-  await (await token.mint(wallet.address, creatorAlloc, { nonce: nonce++ })).wait();
-  await (await token.mint(ethers.getAddress(treasury), treasuryAlloc, { nonce: nonce++ })).wait();
+  const txCreatorMint = await token.mint(wallet.address, CREATOR_ALLOCATION, { nonce: nonce++ });
+  await txCreatorMint.wait();
+  console.log(`   ✅ Creator allocation: ${ethers.formatUnits(CREATOR_ALLOCATION, 18)} tokens`);
 
-  console.log(
-    `✅ Minted allocations — Creator: ${ethers.formatUnits(
-      creatorAlloc
-    )}, Treasury: ${ethers.formatUnits(treasuryAlloc)}`
-  );
+  const txPlatformMint = await token.mint(ethers.getAddress(platformWallet), PLATFORM_ALLOCATION, { nonce: nonce++ });
+  await txPlatformMint.wait();
+  console.log(`   ✅ Platform allocation: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)} tokens`);
 
-  // ===== 3️⃣ Add Liquidity (ETH + token) =====
-  const router = new ethers.Contract(
-    ethers.getAddress(UNISWAP_V2_ROUTER),
-    UNISWAP_ABI,
-    wallet
-  );
-  const tokenLiq = liqAlloc;
-  const ethLiq = ethers.parseEther("0.002");
-  await (
-    await token.approve(ethers.getAddress(UNISWAP_V2_ROUTER), tokenLiq, { nonce: nonce++ })
-  ).wait();
+  const txCurveMint = await token.mint(curveAddr, LIQUIDITY_ALLOCATION, { nonce: nonce++ });
+  await txCurveMint.wait();
+  console.log(`   ✅ Bonding curve allocation: ${ethers.formatUnits(LIQUIDITY_ALLOCATION, 18)} tokens`);
 
-  const deadline = Math.floor(Date.now() / 1000) + 600;
-  await (
-    await router.addLiquidityETH(
-      ethers.getAddress(tokenAddr),
-      tokenLiq,
-      (tokenLiq * 95n) / 100n,
-      (ethLiq * 95n) / 100n,
-      ethers.getAddress(wallet.address),
-      deadline,
-      { value: ethLiq, nonce: nonce++ }
-    )
-  ).wait();
-  console.log("💧 Liquidity added successfully (0.002 ETH paired).");
+  // Step 3: Provide initial liquidity to bonding curve
+  console.log(`\n💧 Step 3: Initializing bonding curve with ETH liquidity`);
 
-  // ===== 4️⃣ Update backend/datasets.json =====
+  const curve = new ethers.Contract(curveAddr, curveArtifact.abi, wallet);
+
+  const txLiquidity = await wallet.sendTransaction({
+    to: curveAddr,
+    value: INITIAL_LIQUIDITY_ETH,
+    nonce: nonce++,
+  });
+  await txLiquidity.wait();
+  console.log(`   ✅ Sent ${ethers.formatEther(INITIAL_LIQUIDITY_ETH)} ETH to bonding curve`);
+
+  // Verify bonding curve state
+  const ethBal = await provider.getBalance(curveAddr);
+  const tokenBal = await token.balanceOf(curveAddr);
+  const pricePerToken = await curve.getPrice();
+
+  console.log(`\n📊 Bonding Curve State:`);
+  console.log(`   ETH Balance: ${ethers.formatEther(ethBal)} ETH`);
+  console.log(`   Token Supply: ${ethers.formatUnits(tokenBal, 18)} tokens`);
+  console.log(`   Price per token: ${ethers.formatUnits(pricePerToken, 18)} ETH`);
+
+  // Step 4: Update backend
+  console.log(`\n📁 Step 4: Updating backend datasets`);
+
   const file = path.join(__dirname, "../backend/datasets.json");
   const data = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : {};
-  data[tokenAddr.toLowerCase()] = { symbol, cid };
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
-  console.log("🗂 Updated backend/datasets.json\n");
 
-  console.log("🎉 Done! Nonce sequence ended at:", nonce - 1);
+  data[tokenAddr.toLowerCase()] = {
+    symbol: tokenSymbol,
+    cid: HARDCODED_CID,
+    bonding_curve: curveAddr.toLowerCase(),
+    creator: wallet.address.toLowerCase(),
+    timestamp: Date.now(),
+  };
+
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  console.log(`   ✅ Updated backend/datasets.json`);
+
+  console.log(`\n🎉 Success! Token created and ready to trade`);
+  console.log(`   Token: ${tokenAddr}`);
+  console.log(`   Bonding Curve: ${curveAddr}`);
+  console.log(`   Network: Base Sepolia`);
+  console.log(`   Explorer: https://sepolia.basescan.org/address/${tokenAddr}`);
+  console.log(`\n   Start trading now on http://localhost:4000`);
 }
 
-main().catch(console.error);
+main().catch(err => {
+  console.error(err);
+  process.exitCode = 1;
+});
