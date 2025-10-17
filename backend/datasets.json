@@ -1,1 +1,9 @@
-{}
+{
+  "0x46575c40f8b95dde778903782d988363af0dfcb2": {
+    "symbol": "FINAL",
+    "cid": "bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34",
+    "bonding_curve": "0x18997df50456411565160f1c4b928d66c6db9e75",
+    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
+    "timestamp": 1760716273811
+  }
+}
