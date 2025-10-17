@@ -11,13 +11,13 @@
   "dependencies": {
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",
     "@openzeppelin/contracts": "^4.9.0",
-    "axios": "^1.6.0",
+    "axios": "^1.7.0",
     "dotenv": "^16.6.1",
     "ethers": "^6.15.0",
     "express": "^4.21.2",
     "form-data": "^4.0.0",
     "hardhat": "^2.16.0",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5"
+    "multer": "^1.4.5-lts.1"
   }
 }
