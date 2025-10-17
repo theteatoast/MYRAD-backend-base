@@ -19,49 +19,61 @@ contract BondingCurve is ReentrancyGuard {
     }
 
     function getPrice() public view returns (uint256) {
-        uint256 contractTokenBalance = token.balanceOf(address(this));
-        uint256 contractEthBalance = address(this).balance;
+        uint256 tokenBal = token.balanceOf(address(this));
+        uint256 ethBal = address(this).balance;
 
-        if (contractTokenBalance == 0) return 0;
-        return (contractEthBalance * 1e18) / contractTokenBalance;
+        if (tokenBal == 0) return 0;
+        // Price per token in wei (18 decimals)
+        return (ethBal * 1e18) / tokenBal;
     }
 
-    function getBuyAmount(uint256 ethSpent) public view returns (uint256) {
-        if (ethSpent == 0) return 0;
+    function getBuyAmount(uint256 ethAmount) public view returns (uint256) {
+        require(ethAmount > 0, "ETH must be > 0");
 
-        uint256 contractTokenBalance = token.balanceOf(address(this));
-        uint256 contractEthBalance = address(this).balance;
-        uint256 currentPrice = getPrice();
+        uint256 tokenBal = token.balanceOf(address(this));
+        uint256 ethBal = address(this).balance;
 
-        // Handle initial buy when price is 0
-        if (currentPrice == 0 || contractTokenBalance == 0) {
-            // Initial buy: higher initial ratio for better UX
-            return ethSpent * 1000;  // 1 ETH = 1000 tokens
+        // Handle empty curve - simple 1:1 initialization
+        if (tokenBal == 0 || ethBal == 0) {
+            return ethAmount * 100;  // 1 ETH = 100 tokens initially
         }
 
-        // Standard bonding curve: linear pricing
-        uint256 newEthBalance = contractEthBalance + ethSpent;
-        uint256 avgPrice = (currentPrice + ((newEthBalance * 1e18) / (contractTokenBalance + ethSpent))) / 2;
+        // Linear bonding curve: price = ethBalance / tokenSupply
+        // When buying: tokens received = ethAmount / avgPrice
+        // avgPrice = (currentPrice + futurePrice) / 2
+        // currentPrice = ethBal / tokenBal
+        // futurePrice = (ethBal + ethAmount) / (tokenBal + tokensReceived)
+        // This simplifies to: tokensReceived ≈ ethAmount * tokenBal / (ethBal + ethAmount/2)
+
+        // Simple linear formula: tokens = ethAmount * currentSupply / currentBalance
+        // This avoids complex math and division by zero issues
+        uint256 tokensOut = (ethAmount * tokenBal) / ethBal;
         
-        if (avgPrice == 0) return 0;
-        uint256 tokensToAdd = ethSpent / avgPrice;
-        return tokensToAdd;
+        // Add margin for price increase (return fewer tokens to account for price moving up)
+        // Discount by ~10% to create mild slippage
+        tokensOut = (tokensOut * 9) / 10;
+
+        return tokensOut;
     }
 
     function getSellAmount(uint256 tokenAmount) public view returns (uint256) {
-        if (tokenAmount == 0) return 0;
+        require(tokenAmount > 0, "Token amount must be > 0");
 
-        uint256 contractTokenBalance = token.balanceOf(address(this));
-        uint256 contractEthBalance = address(this).balance;
+        uint256 tokenBal = token.balanceOf(address(this));
+        uint256 ethBal = address(this).balance;
 
-        if (tokenAmount > contractTokenBalance) return 0;
-        if (contractTokenBalance == 0) return 0;
+        // Must have tokens and ETH in curve
+        if (tokenBal == 0 || ethBal == 0) return 0;
+        if (tokenAmount > tokenBal) return 0;
 
-        // Linear bonding curve: price decreases as supply increases
-        uint256 newSupply = contractTokenBalance - tokenAmount;
-        uint256 ethToReturn = (contractEthBalance * tokenAmount) / contractTokenBalance;
+        // Simple linear formula: ethOut = tokenAmount * currentBalance / currentSupply
+        // This is the inverse of buy pricing
+        uint256 ethOut = (tokenAmount * ethBal) / tokenBal;
+        
+        // Apply slippage (10%) when selling
+        ethOut = (ethOut * 9) / 10;
 
-        return ethToReturn;
+        return ethOut;
     }
 
     function buy() external payable nonReentrant {
@@ -70,11 +82,10 @@ contract BondingCurve is ReentrancyGuard {
         uint256 tokensToReceive = getBuyAmount(msg.value);
         require(tokensToReceive > 0, "Insufficient liquidity");
 
-        require(
-            token.balanceOf(address(this)) >= tokensToReceive,
-            "Not enough tokens in curve"
-        );
+        uint256 tokenBal = token.balanceOf(address(this));
+        require(tokenBal >= tokensToReceive, "Not enough tokens in curve");
 
+        // Transfer tokens to buyer
         require(token.transfer(msg.sender, tokensToReceive), "Token transfer failed");
 
         emit Buy(msg.sender, msg.value, tokensToReceive);
@@ -82,17 +93,23 @@ contract BondingCurve is ReentrancyGuard {
 
     function sell(uint256 tokenAmount) external nonReentrant {
         require(tokenAmount > 0, "Token amount required");
-        require(token.balanceOf(msg.sender) >= tokenAmount, "Insufficient balance");
+
+        uint256 userBal = token.balanceOf(msg.sender);
+        require(userBal >= tokenAmount, "Insufficient token balance");
 
         uint256 ethToReceive = getSellAmount(tokenAmount);
         require(ethToReceive > 0, "Insufficient liquidity");
-        require(address(this).balance >= ethToReceive, "Not enough ETH in curve");
 
+        uint256 ethBal = address(this).balance;
+        require(ethBal >= ethToReceive, "Not enough ETH in curve");
+
+        // Transfer tokens from seller to curve
         require(
             token.transferFrom(msg.sender, address(this), tokenAmount),
             "Token transfer failed"
         );
 
+        // Transfer ETH to seller
         (bool success, ) = payable(msg.sender).call{value: ethToReceive}("");
         require(success, "ETH transfer failed");
 
