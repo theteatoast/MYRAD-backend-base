@@ -397,7 +397,7 @@ const WETH_ADDRESS = "0x4200000000000000000000000000000000000006";    // WETH to
 │      Blockchain (Base Sepolia)       │
 │ ┌──────────────────────────────────┐ │
 │ │  DataCoin (ERC20 + AccessControl)│ │
-│ └──────────────────────────────────┘ │
+│ └─────────────────────��────────────┘ │
 │              ▲
 │              │ Events: Transfer, Redeemed
 │              │
@@ -530,6 +530,640 @@ MIT
 ## 🤝 Contributing
 
 For contributions, feature requests, or bug reports, open an issue or PR.
+
+---
+
+---
+
+## 🐛 Troubleshooting
+
+### "Router contract not found" Error
+**Cause**: `ROUTER_ADDRESS` is invalid or not deployed on the network.
+
+**Solution**:
+1. Check `ROUTER_ADDRESS` in `frontend/app.js` is correct for your chain
+2. Verify the address on block explorer (e.g., Basescan)
+3. Use Uniswap redirect as fallback (automatically done if router not found)
+
+---
+
+### "No liquidity or incompatible router" Error
+**Cause**: Token has no liquidity pool or router doesn't support the pair.
+
+**Solution**:
+1. Ensure `createDataCoin.js` successfully added liquidity
+2. Check Uniswap on Basescan for the pool: `WETH ↔ TokenAddress`
+3. Manually add liquidity via Uniswap if needed
+4. Use Uniswap interface directly as fallback
+
+---
+
+### "Burn failed" or "Redeemed event not detected"
+**Cause**:
+- Listener not running
+- Event not indexed correctly
+- `datasets.json` not updated with new token
+
+**Solution**:
+1. Ensure `npm run listen` is running in another terminal
+2. Check `backend/datasets.json` contains the new token address
+3. Check listener logs for errors
+4. Verify token address matches `DataCoinCreated` event
+
+---
+
+### "Access not granted after burn"
+**Cause**:
+- Listener hasn't processed the burn event yet
+- Network latency or RPC timeout
+
+**Solution**:
+1. Wait a few seconds and try again
+2. Check listener logs: `backend/listener.js` should log `"🔥 Granting access: "`
+3. Check `backend/db.json` for the access record
+4. Ensure `BASE_SEPOLIA_RPC_URL` is a valid, responding endpoint
+
+---
+
+### "Invalid nonce" Error
+**Cause**: Multiple concurrent transactions from same wallet without waiting.
+
+**Solution**:
+1. Wait for transaction confirmation before sending next one
+2. Check wallet nonce on Basescan
+3. Use manual nonce management if needed (see `createDataCoin.js` for example)
+
+---
+
+### "ENS resolution failed" Error
+**Cause**: Ethers v6 attempting to resolve ENS names on networks without support.
+
+**Solution**:
+- Already fixed in `createDataCoin.js` by disabling ENS resolution
+- No action needed
+
+---
+
+## 📡 API Reference
+
+### GET /datasets
+
+Fetch all registered DataCoin tokens.
+
+**Request**:
+```bash
+curl http://localhost:4000/datasets
+```
+
+**Response** (200 OK):
+```json
+{
+  "0xdcbfa10e65e0a2a4e91990e8702f60789bb9df0a": {
+    "symbol": "DS1",
+    "cid": "ipfs://bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34"
+  },
+  "0x1234567890abcdef1234567890abcdef12345678": {
+    "symbol": "MDATA",
+    "cid": "ipfs://bafkreitest123"
+  }
+}
+```
+
+**Response** (200 OK, no datasets):
+```json
+{}
+```
+
+---
+
+### GET /access/:user/:symbol
+
+Fetch the latest access record for a user and dataset.
+
+**Request**:
+```bash
+curl http://localhost:4000/access/0x342Fcc7A64A9dB5b12Ae69Caf8aA05c9/DS1
+```
+
+**Response** (200 OK):
+```json
+{
+  "user": "0x342fcc7a64a9db5b12ae69caf8aa05c9",
+  "symbol": "DS1",
+  "download": "https://gateway.lighthouse.storage/ipfs/bafkreif...?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "ts": 1697234567890
+}
+```
+
+**Response** (404 Not Found):
+```json
+{
+  "error": "not found"
+}
+```
+
+**Response** (404 No database):
+```json
+{
+  "error": "no redemptions"
+}
+```
+
+---
+
+### GET /
+
+Health check endpoint.
+
+**Request**:
+```bash
+curl http://localhost:4000/
+```
+
+**Response** (200 OK):
+```
+MYRAD Backend API running ✅
+```
+
+---
+
+## 🔗 Smart Contract Interaction Guide
+
+### Create a DataCoin Token (via Factory)
+
+**Contract**: DataCoinFactory at `0x...`
+
+**Function**: `createDataCoin(name, symbol, totalSupply, unused, metadataCid)`
+
+**Parameters**:
+- `name` (string): Full name (e.g., "Medical Dataset 1")
+- `symbol` (string): Short ticker (e.g., "MDATA")
+- `totalSupply` (uint256): Total supply in wei (e.g., `ethers.parseUnits("1000000", 18)`)
+- `unused` (uint256): Legacy parameter, pass `0`
+- `metadataCid` (string): IPFS CID (e.g., "bafkrei...")
+
+**Example (Ethers.js)**:
+```javascript
+const factory = new ethers.Contract(
+  "0x...",
+  ["function createDataCoin(string,string,uint256,uint256,string) returns (address)"],
+  signer
+);
+
+const tx = await factory.createDataCoin(
+  "Medical Data",
+  "MDATA",
+  ethers.parseUnits("1000000", 18),
+  0,
+  "ipfs://bafkrei..."
+);
+
+const receipt = await tx.wait();
+console.log("Token created at:", receipt.events[0].args.dataCoinAddress);
+```
+
+---
+
+### Mint Tokens
+
+**Contract**: DataCoin at `0x...`
+
+**Function**: `mint(address to, uint256 amount)` (only MINTER_ROLE)
+
+**Example**:
+```javascript
+const token = new ethers.Contract(
+  "0x...",
+  ["function mint(address, uint256)"],
+  signer
+);
+
+const tx = await token.mint(
+  "0x1234...",
+  ethers.parseUnits("1000", 18)
+);
+await tx.wait();
+```
+
+---
+
+### Burn Tokens
+
+**Contract**: DataCoin at `0x...`
+
+**Function 1**: `burn(uint256 amount)` - Burn specific amount
+
+```javascript
+const tx = await token.burn(ethers.parseUnits("100", 18));
+await tx.wait();
+```
+
+**Function 2**: `burnForAccess()` - Burn entire balance (grants download access)
+
+```javascript
+const tx = await token.burnForAccess();
+await tx.wait();
+```
+
+---
+
+### Check Balance
+
+**Contract**: DataCoin at `0x...`
+
+**Function**: `balanceOf(address)` (ERC20 standard)
+
+**Example**:
+```javascript
+const balance = await token.balanceOf("0x1234...");
+console.log("Balance:", ethers.formatUnits(balance, 18));
+```
+
+---
+
+### Check Token Metadata
+
+**Contract**: DataCoin at `0x...`
+
+**Properties**:
+```javascript
+const name = await token.name();
+const symbol = await token.symbol();
+const totalSupply = await token.totalSupply();
+const cid = await token.datasetCid();
+
+console.log(`${name} (${symbol})`);
+console.log(`Total supply: ${ethers.formatUnits(totalSupply, 18)}`);
+console.log(`Dataset: ipfs://${cid}`);
+```
+
+---
+
+## 🌐 Network Configuration
+
+### Base Sepolia Testnet
+
+**Chain ID**: 84532
+
+**RPC Endpoints** (pick one):
+- Official: `https://sepolia.base.org`
+- Alchemy: `https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY`
+- Infura: `https://base-sepolia.infura.io/v3/YOUR_PROJECT_ID`
+
+**Faucet**: https://www.basefaucet.io/ (get testnet ETH)
+
+**Block Explorer**: https://sepolia.basescan.org/
+
+**Current Setup**:
+- Contract network: Base Sepolia
+- Config file: `hardhat.config.js`
+- RPC URL env var: `BASE_SEPOLIA_RPC_URL`
+
+---
+
+## 📊 File Database Schemas
+
+### backend/datasets.json
+
+Registry of all created DataCoin tokens. Updated when new tokens are created.
+
+**Schema**:
+```json
+{
+  "0xtoken_address_lowercase": {
+    "symbol": "SYMBOL",
+    "cid": "ipfs://CID_STRING"
+  }
+}
+```
+
+**Example**:
+```json
+{
+  "0xdcbfa10e65e0a2a4e91990e8702f60789bb9df0a": {
+    "symbol": "DS1",
+    "cid": "ipfs://bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34"
+  },
+  "0x9876543210fedcba9876543210fedcba98765432": {
+    "symbol": "MEDICAL",
+    "cid": "ipfs://bafkreitest"
+  }
+}
+```
+
+---
+
+### backend/db.json
+
+Access log database. Appended to when users burn tokens.
+
+**Entry Schema**:
+```json
+{
+  "user": "0x342fcc7a64a9db5b12ae69caf8aa05c9",
+  "symbol": "DS1",
+  "token": "0xdcbfa10e65e0a2a4e91990e8702f60789bb9df0a",
+  "amount": "1000000000000000000",
+  "downloadUrl": "https://gateway.lighthouse.storage/ipfs/bafkreif...?token=eyJhbGciOiJIUzI1NiJ9...",
+  "ts": 1697234567890
+}
+```
+
+**Full Example**:
+```json
+[
+  {
+    "user": "0x342fcc7a64a9db5b12ae69caf8aa05c9",
+    "symbol": "DS1",
+    "token": "0xdcbfa10e65e0a2a4e91990e8702f60789bb9df0a",
+    "amount": "1000000000000000000",
+    "downloadUrl": "https://gateway.lighthouse.storage/ipfs/bafkrei...?token=...",
+    "ts": 1697234567890
+  },
+  {
+    "user": "0x111111111111111111111111111111111111111",
+    "symbol": "MEDICAL",
+    "token": "0x9876543210fedcba9876543210fedcba98765432",
+    "amount": "500000000000000000",
+    "downloadUrl": "https://gateway.lighthouse.storage/ipfs/bafkrei...?token=...",
+    "ts": 1697234567900
+  }
+]
+```
+
+---
+
+### backend/lastBlock.json
+
+Listener state file. Tracks the last processed block to avoid reprocessing events.
+
+**Schema**:
+```json
+{
+  "lastBlock": 12345678
+}
+```
+
+**Auto-created**: Yes (listener.js creates on first run)
+**Auto-updated**: Yes (every poll/block)
+**Manual reset**: Delete file to restart from an earlier block
+
+---
+
+## 🚀 Deployment Checklist
+
+### Pre-Deployment
+
+- [ ] Set all required environment variables (`BASE_SEPOLIA_RPC_URL`, `PRIVATE_KEY`, `MYRAD_TREASURY`, `DOWNLOAD_SECRET`)
+- [ ] Have testnet ETH in wallet for gas
+- [ ] Test all scripts locally
+- [ ] Update `ROUTER_ADDRESS` and `WETH_ADDRESS` in `frontend/app.js`
+- [ ] Prepare dataset IPFS CID
+
+### Deployment Steps
+
+1. **Deploy Factory**:
+   ```bash
+   npm run deploy
+   ```
+   - Note the factory address
+
+2. **Create First Token**:
+   ```bash
+   node scripts/createDataCoin.js <FACTORY_ADDRESS> "Dataset Name" "SYMBOL" 1000000 "ipfs://CID"
+   ```
+   - Verify token address on Basescan
+   - Check liquidity pool created
+
+3. **Start Backend Services**:
+   ```bash
+   npm run dev   # Terminal 1
+   npm run listen # Terminal 2
+   ```
+   - Verify server running on port 4000
+   - Verify listener subscribed to events
+
+4. **Test Frontend**:
+   - Open http://localhost:4000
+   - Connect wallet
+   - Verify datasets load
+   - Test buy/sell/burn flows
+
+5. **Monitor**:
+   - Watch listener logs for burn events
+   - Check `backend/db.json` for access records
+   - Monitor API endpoints
+
+---
+
+## 📈 Performance & Scalability
+
+### Current Limitations
+
+1. **File-based Storage**: `db.json` and `datasets.json` are single JSON files
+   - Suitable for MVP/testing
+   - Recommend database migration for production
+
+2. **Listener Polling**: 8-second interval for HTTP RPC
+   - Fast enough for most use cases
+   - Lower latency with WebSocket RPC
+
+3. **Frontend Balance Queries**: Real-time balance check per token
+   - O(n) calls to blockchain
+   - Consider batch reading with multicall for many tokens
+
+### Production Recommendations
+
+1. **Database**: Migrate from JSON to MongoDB, PostgreSQL, or similar
+2. **RPC**: Use WebSocket for real-time events (lower latency)
+3. **Caching**: Add Redis or similar for metadata/balance caching
+4. **Frontend**: Implement pagination for large token lists
+5. **Listener**: Deploy redundant listeners for high availability
+6. **API**: Add rate limiting and authentication
+
+---
+
+## 🔐 Security Checklist
+
+### Smart Contracts
+
+- [x] Uses OpenZeppelin audited contracts (ERC20, AccessControl)
+- [x] Role-based access control for minting
+- [x] No obvious vulnerabilities (single-purpose contracts)
+- [ ] Recommend: Formal audit before mainnet deployment
+
+### Backend
+
+- [x] Input validation on API endpoints
+- [x] File-based access control (no direct DB exposure)
+- [x] JWT signing for download URLs
+- [ ] Recommend: Add API authentication (API keys, OAuth)
+- [ ] Recommend: Add rate limiting
+- [ ] Recommend: Rotate `DOWNLOAD_SECRET` regularly
+
+### Frontend
+
+- [x] No hardcoded secrets
+- [x] Uses MetaMask (user controls keys)
+- [x] Transaction simulation before execution
+- [ ] Recommend: Content Security Policy headers
+- [ ] Recommend: HTTPS enforcement
+
+### Private Keys & Secrets
+
+- ❌ **DO NOT** commit `.env` file to git
+- ❌ **DO NOT** log private keys or secrets
+- ✅ **DO** use strong, random `DOWNLOAD_SECRET`
+- ✅ **DO** rotate secrets regularly
+- ✅ **DO** use environment variables for all secrets
+
+---
+
+## 🧑‍💻 Developer Notes
+
+### Adding a New Endpoint
+
+1. Add route in `backend/server.js`:
+   ```javascript
+   app.get("/new-endpoint", (req, res) => {
+     res.json({ message: "Hello" });
+   });
+   ```
+
+2. Restart server: `npm run dev`
+
+3. Test: `curl http://localhost:4000/new-endpoint`
+
+---
+
+### Adding a New Smart Contract Event
+
+1. Add event ABI to listener:
+   ```javascript
+   const ABI = [
+     "event MyEvent(address indexed user, uint256 amount)"
+   ];
+   ```
+
+2. Add event handler:
+   ```javascript
+   contract.on("MyEvent", (user, amount, event) => {
+     console.log("Event triggered:", user, amount);
+     // Handle event
+   });
+   ```
+
+3. Restart listener
+
+---
+
+### Debugging Tips
+
+**Listener Not Detecting Events**:
+```bash
+# Check listener logs
+# Ensure datasets.json contains the token address
+cat backend/datasets.json
+
+# Check if token emitted event
+# View transaction on Basescan
+```
+
+**API Not Responding**:
+```bash
+# Check if server is running
+curl http://localhost:4000/
+
+# Check logs for errors
+# Verify PORT in config.js
+```
+
+**Frontend Not Connecting to Wallet**:
+```javascript
+// Check browser console for errors
+// Verify MetaMask is installed
+// Verify Base Sepolia is added to MetaMask
+console.log(window.ethereum); // Should exist
+```
+
+---
+
+## 📚 Additional Resources
+
+### Documentation
+- **OpenZeppelin**: https://docs.openzeppelin.com/contracts/
+- **Ethers.js**: https://docs.ethers.org/v6/
+- **Hardhat**: https://hardhat.org/docs
+- **Base**: https://docs.base.org/
+- **Uniswap V2**: https://docs.uniswap.org/contracts/v2/overview
+
+### Tools
+- **Basescan Explorer**: https://sepolia.basescan.org/
+- **Uniswap Interface**: https://app.uniswap.org/
+- **MetaMask**: https://metamask.io/
+- **IPFS/Lighthouse**: https://www.lighthouse.storage/
+
+### Examples
+- **Ethers.js Examples**: https://docs.ethers.org/v6/getting-started/
+- **OpenZeppelin Contracts**: https://github.com/OpenZeppelin/openzeppelin-contracts/
+
+---
+
+## 🤔 FAQ
+
+### Q: How do I add a new dataset?
+**A**:
+1. Upload data to IPFS (Lighthouse, Pinata, etc.)
+2. Get the CID
+3. Run: `node scripts/createDataCoin.js <FACTORY> "Name" "SYMBOL" 1000000 "ipfs://CID"`
+4. Token is created with initial liquidity on Uniswap
+
+---
+
+### Q: Can users create tokens themselves?
+**A**:
+Yes! Anyone can call the factory's `createDataCoin()` function. Currently done via script, but can be exposed in UI.
+
+---
+
+### Q: What happens if listener crashes?
+**A**:
+It saves the last processed block in `lastBlock.json`. On restart, it resumes from that block (no missed events).
+
+---
+
+### Q: How long is download access valid?
+**A**:
+30 minutes (JWT token expiry). Users can burn again for a new access window.
+
+---
+
+### Q: Can I use mainnet instead of testnet?
+**A**:
+Yes, but requires:
+1. Updating `hardhat.config.js` network configuration
+2. Deploying new factory contract on mainnet
+3. Using real ETH (not testnet)
+4. Strong security review before mainnet
+
+---
+
+### Q: How do I migrate from JSON storage to a database?
+**A**:
+1. Create database schema matching JSON structure
+2. Update `backend/utils.js` functions (`saveAccess`) to write to DB
+3. Update `backend/server.js` endpoints to read from DB
+4. Test thoroughly before deploying
+
+---
+
+## 📞 Support
+
+For issues or questions:
+1. Check this README and troubleshooting section
+2. Review blockchain explorer (Basescan) for transaction details
+3. Check listener logs for event processing issues
+4. Open an issue in the repository
 
 ---
 
