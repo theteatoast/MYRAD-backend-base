@@ -2,9 +2,22 @@
 pragma solidity ^0.8.18;
 
 import "./DataCoin.sol";
+import "./BondingCurve.sol";
 
 contract DataCoinFactory {
-    event DataCoinCreated(address indexed creator, address indexed dataCoinAddress, string symbol, string cid);
+    event DataCoinCreated(
+        address indexed creator,
+        address indexed dataCoinAddress,
+        address indexed bondingCurveAddress,
+        string symbol,
+        string cid
+    );
+
+    address public platformAddress;
+
+    constructor(address _platform) {
+        platformAddress = _platform;
+    }
 
     function createDataCoin(
         string memory name_,
@@ -12,14 +25,11 @@ contract DataCoinFactory {
         uint256 totalSupply_,
         uint256,
         string memory metadataCid_
-    ) external returns (address) {
-        DataCoin token = new DataCoin(name_, symbol_, 0, msg.sender, metadataCid_);
+    ) external returns (address, address) {
+        DataCoin token = new DataCoin(name_, symbol_, totalSupply_, msg.sender, metadataCid_);
+        BondingCurve curve = new BondingCurve(address(token), msg.sender, platformAddress);
 
-        // Grant factory + creator both admin + minter roles
-        token.grantRole(token.DEFAULT_ADMIN_ROLE(), msg.sender);
-        token.grantRole(token.MINTER_ROLE(), msg.sender);
-
-        emit DataCoinCreated(msg.sender, address(token), symbol_, metadataCid_);
-        return address(token);
+        emit DataCoinCreated(msg.sender, address(token), address(curve), symbol_, metadataCid_);
+        return (address(token), address(curve));
     }
 }
