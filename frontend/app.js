@@ -234,43 +234,56 @@ async function sellToken(tokenAddr, tokenAmountStr, meta) {
 
     if (!provider) provider = new ethers.BrowserProvider(window.ethereum);
 
+    // Verify contract exists
+    const code = await provider.getCode(meta.bonding_curve);
+    if (code === "0x") {
+      STATUS.innerText = "❌ Error: Bonding curve contract not found at address";
+      console.error(`No contract at: ${meta.bonding_curve}`);
+      return;
+    }
+
     const curve = new ethers.Contract(meta.bonding_curve, BONDING_CURVE_ABI, signer);
     const token = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
 
-    const ethToReceive = await curve.getSellAmount(tokenAmount);
-    if (ethToReceive === 0n) {
-      STATUS.innerText = "❌ Insufficient liquidity or invalid amount";
-      return;
+    try {
+      const ethToReceive = await curve.getSellAmount(tokenAmount);
+      if (ethToReceive === 0n) {
+        STATUS.innerText = "❌ Insufficient liquidity or invalid amount";
+        return;
+      }
+
+      const displayEth = ethers.formatEther(ethToReceive);
+      const confirmed = confirm(`Sell ${tokenAmountStr} tokens for ~${displayEth} ETH?\n\nConfirm?`);
+
+      if (!confirmed) {
+        STATUS.innerText = "Cancelled";
+        return;
+      }
+
+      STATUS.innerText = "⏳ Checking approval...";
+
+      const allowance = await token.allowance(userAddress, meta.bonding_curve);
+      if (allowance < tokenAmount) {
+        STATUS.innerText = "⏳ Approving tokens...";
+        const approveTx = await token.approve(meta.bonding_curve, ethers.parseUnits("1000000000", 18));
+        await approveTx.wait();
+        STATUS.innerText = "✅ Approved, now selling...";
+      }
+
+      STATUS.innerText = "⏳ Confirm sell in wallet...";
+
+      const tx = await curve.sell(tokenAmount);
+      const receipt = await tx.wait();
+
+      STATUS.innerText = `✅ Sell confirmed! Received ~${displayEth} ETH`;
+
+      setTimeout(() => {
+        loadDatasets();
+      }, 1000);
+    } catch (callErr) {
+      console.error("Contract call error:", callErr.message);
+      STATUS.innerText = "❌ Contract error: " + callErr.message;
     }
-
-    const displayEth = ethers.formatEther(ethToReceive);
-    const confirmed = confirm(`Sell ${tokenAmountStr} tokens for ~${displayEth} ETH?\n\nConfirm?`);
-
-    if (!confirmed) {
-      STATUS.innerText = "Cancelled";
-      return;
-    }
-
-    STATUS.innerText = "⏳ Checking approval...";
-
-    const allowance = await token.allowance(userAddress, meta.bonding_curve);
-    if (allowance < tokenAmount) {
-      STATUS.innerText = "⏳ Approving tokens...";
-      const approveTx = await token.approve(meta.bonding_curve, ethers.parseUnits("1000000000", 18));
-      await approveTx.wait();
-      STATUS.innerText = "✅ Approved, now selling...";
-    }
-
-    STATUS.innerText = "⏳ Confirm sell in wallet...";
-
-    const tx = await curve.sell(tokenAmount);
-    const receipt = await tx.wait();
-
-    STATUS.innerText = `✅ Sell confirmed! Received ~${displayEth} ETH`;
-
-    setTimeout(() => {
-      loadDatasets();
-    }, 1000);
   } catch (err) {
     console.error("Sell error:", err);
     STATUS.innerText = "❌ Sell failed: " + (err?.message || err);
