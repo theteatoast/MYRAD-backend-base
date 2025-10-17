@@ -1,9 +1,16 @@
 const { ethers } = require("ethers");
-const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
 require("dotenv").config();
+
+// Initialize hardhat runtime (required for artifacts)
+let hre;
+try {
+  hre = require("hardhat");
+} catch (err) {
+  console.error("Warning: Hardhat not initialized in this context");
+}
 
 const DATASETS_FILE = path.join(__dirname, "datasets.json");
 
@@ -111,7 +118,7 @@ async function createDatasetToken(cid, name, symbol, description) {
     );
     await txPlatformMint.wait();
     console.log(
-      `   ✅ Platform: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)} tokens`
+      `   ��� Platform: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)} tokens`
     );
 
     const txCurveMint = await token.mint(
