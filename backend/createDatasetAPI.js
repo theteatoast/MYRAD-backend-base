@@ -90,17 +90,18 @@ async function createDatasetToken(cid, name, symbol, description) {
 
     console.log(`   ✅ Token: ${tokenAddr}`);
 
-    // Step 2: Distribute tokens (fast transfers)
+    // Step 2: Distribute allocations (keep 90% in wallet for pool init)
     console.log(`💳 Distributing allocations...`);
     const token = new ethers.Contract(tokenAddr, tokenArtifact.abi, wallet);
 
-    // Transfer platform
+    // Transfer platform only
     await (await token.transfer(ethers.getAddress(platformWallet), PLATFORM_ALLOCATION, { nonce: txCount++ })).wait();
     console.log(`   ✅ Platform: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)}`);
 
-    // Transfer marketplace (where liquidity goes)
-    await (await token.transfer(ethers.getAddress(marketplaceAddr), LIQUIDITY_ALLOCATION, { nonce: txCount++ })).wait();
-    console.log(`   ✅ Liquidity pool: ${ethers.formatUnits(LIQUIDITY_ALLOCATION, 18)}`);
+    // We keep 90% liquidity tokens in wallet (don't transfer yet)
+    // Creator now has: 50k creator allocation + 900k liquidity tokens = 950k
+    const creatorBal = await token.balanceOf(wallet.address);
+    console.log(`   ✅ Creator wallet: ${ethers.formatUnits(creatorBal, 18)}`);
 
     // Step 3: Initialize pool with USDC
     console.log(`💧 Initializing USDC pool...`);
@@ -113,14 +114,21 @@ async function createDatasetToken(cid, name, symbol, description) {
 
     const marketplace = new ethers.Contract(marketplaceAddr, marketplaceArtifact.abi, wallet);
 
-    // Check balance
+    // Check USDC balance
     const usdcBalance = await usdc.balanceOf(wallet.address);
     if (usdcBalance < INITIAL_USDC) {
       throw new Error(`Insufficient USDC: need ${ethers.formatUnits(INITIAL_USDC, 6)}, have ${ethers.formatUnits(usdcBalance, 6)}`);
     }
 
-    // Approve and initialize in sequence
+    // Approve tokens to marketplace (so it can transferFrom them)
+    await (await token.approve(marketplaceAddr, LIQUIDITY_ALLOCATION, { nonce: txCount++ })).wait();
+    console.log(`   ✅ Approved tokens to marketplace`);
+
+    // Approve USDC to marketplace
     await (await usdc.approve(marketplaceAddr, INITIAL_USDC, { nonce: txCount++ })).wait();
+    console.log(`   ✅ Approved USDC to marketplace`);
+
+    // Initialize pool (marketplace will transferFrom tokens + USDC from caller)
     await (await marketplace.initPool(tokenAddr, wallet.address, LIQUIDITY_ALLOCATION, INITIAL_USDC, { nonce: txCount++ })).wait();
     console.log(`   ✅ Pool initialized with 1 USDC`);
 
