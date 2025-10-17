@@ -9,9 +9,6 @@ contract BondingCurve is ReentrancyGuard {
     address public creator;
     address public platform;
 
-    uint256 public ethBalance;
-    uint256 public tokenSupply;
-
     event Buy(address indexed buyer, uint256 ethSent, uint256 tokensReceived);
     event Sell(address indexed seller, uint256 tokensSold, uint256 ethReceived);
 
@@ -32,19 +29,21 @@ contract BondingCurve is ReentrancyGuard {
     function getBuyAmount(uint256 ethSpent) public view returns (uint256) {
         if (ethSpent == 0) return 0;
 
-        uint256 currentPrice = getPrice();
         uint256 contractTokenBalance = token.balanceOf(address(this));
         uint256 contractEthBalance = address(this).balance;
+        uint256 currentPrice = getPrice();
 
         // Handle initial buy when price is 0
-        if (currentPrice == 0) {
-            // Initial buy: 1 token = 1 wei initially
-            return ethSpent * 1e18;
+        if (currentPrice == 0 || contractTokenBalance == 0) {
+            // Initial buy: higher initial ratio for better UX
+            return ethSpent * 1000;  // 1 ETH = 1000 tokens
         }
 
-        uint256 newPrice = ((contractEthBalance + ethSpent) * 1e18) / (contractTokenBalance + ethSpent / currentPrice);
-        uint256 avgPrice = (currentPrice + newPrice) / 2;
-
+        // Standard bonding curve: linear pricing
+        uint256 newEthBalance = contractEthBalance + ethSpent;
+        uint256 avgPrice = (currentPrice + ((newEthBalance * 1e18) / (contractTokenBalance + ethSpent))) / 2;
+        
+        if (avgPrice == 0) return 0;
         uint256 tokensToAdd = ethSpent / avgPrice;
         return tokensToAdd;
     }
@@ -58,9 +57,9 @@ contract BondingCurve is ReentrancyGuard {
         if (tokenAmount > contractTokenBalance) return 0;
         if (contractTokenBalance == 0) return 0;
 
+        // Linear bonding curve: price decreases as supply increases
         uint256 newSupply = contractTokenBalance - tokenAmount;
-        uint256 newEthBalance = (newSupply > 0) ? (newSupply * contractEthBalance) / contractTokenBalance : 0;
-        uint256 ethToReturn = contractEthBalance - newEthBalance;
+        uint256 ethToReturn = (contractEthBalance * tokenAmount) / contractTokenBalance;
 
         return ethToReturn;
     }
@@ -71,8 +70,10 @@ contract BondingCurve is ReentrancyGuard {
         uint256 tokensToReceive = getBuyAmount(msg.value);
         require(tokensToReceive > 0, "Insufficient liquidity");
 
-        ethBalance += msg.value;
-        tokenSupply += tokensToReceive;
+        require(
+            token.balanceOf(address(this)) >= tokensToReceive,
+            "Not enough tokens in curve"
+        );
 
         require(token.transfer(msg.sender, tokensToReceive), "Token transfer failed");
 
@@ -85,11 +86,12 @@ contract BondingCurve is ReentrancyGuard {
 
         uint256 ethToReceive = getSellAmount(tokenAmount);
         require(ethToReceive > 0, "Insufficient liquidity");
+        require(address(this).balance >= ethToReceive, "Not enough ETH in curve");
 
-        require(token.transferFrom(msg.sender, address(this), tokenAmount), "Token transfer failed");
-
-        ethBalance -= ethToReceive;
-        tokenSupply -= tokenAmount;
+        require(
+            token.transferFrom(msg.sender, address(this), tokenAmount),
+            "Token transfer failed"
+        );
 
         (bool success, ) = payable(msg.sender).call{value: ethToReceive}("");
         require(success, "ETH transfer failed");
