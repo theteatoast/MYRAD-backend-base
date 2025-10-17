@@ -191,39 +191,41 @@ async function createDatasetToken(cid, name, symbol, description) {
     }
 
     // Approve token spending by marketplace (with longer wait)
-    console.log(`   ⏳ Approving tokens...`);
+    console.log(`   ⏳ Approving tokens to marketplace...`);
     const approveTx1 = await token.approve(
       marketplaceAddr,
       LIQUIDITY_ALLOCATION,
-      { nonce: nonce++ }
+      { nonce: nonce++, gasLimit: 100000 }
     );
     await approveTx1.wait();
     console.log(`   ✅ Tokens approved`);
 
-    // Wait a bit before next transaction to avoid RPC throttling
-    await new Promise(r => setTimeout(r, 2000));
+    // Wait to avoid RPC throttling
+    console.log(`   ⏳ Waiting before USDC approval...`);
+    await new Promise(r => setTimeout(r, 5000));
 
     // Approve USDC spending by marketplace
-    console.log(`   ⏳ Approving USDC...`);
+    console.log(`   ⏳ Approving USDC to marketplace...`);
     const approveTx2 = await usdc.approve(
       marketplaceAddr,
       INITIAL_USDC_LIQUIDITY,
-      { nonce: nonce++ }
+      { nonce: nonce++, gasLimit: 100000 }
     );
     await approveTx2.wait();
     console.log(`   ✅ USDC approved`);
 
-    // Wait a bit before pool initialization
-    await new Promise(r => setTimeout(r, 2000));
+    // Wait to avoid RPC throttling
+    console.log(`   ⏳ Waiting before pool initialization...`);
+    await new Promise(r => setTimeout(r, 5000));
 
     // Initialize pool
-    console.log(`   ⏳ Initializing pool...`);
+    console.log(`   ⏳ Initializing pool in marketplace...`);
     const txPool = await marketplace.initPool(
       tokenAddr,
       wallet.address,
       LIQUIDITY_ALLOCATION,
       INITIAL_USDC_LIQUIDITY,
-      { nonce: nonce++ }
+      { nonce: nonce++, gasLimit: 300000 }
     );
     const receiptPool = await txPool.wait();
     if (!receiptPool) {
