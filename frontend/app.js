@@ -1,33 +1,43 @@
-let provider, signer, userAddress;
 const STATUS = document.getElementById("status");
 const connectBtn = document.getElementById("connectBtn");
 const datasetsDiv = document.getElementById("datasets");
 const BACKEND_BASE = "";
 
+// USDC on Base Sepolia (6 decimals)
+const BASE_SEPOLIA_USDC = "0x036CbD53842c5426634E7929541eC2318f3dCF7e";
+
 const ERC20_ABI = [
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function burn(uint256 amount) external",
+  "function burnForAccess() external"
+];
+
+const MARKETPLACE_ABI = [
+  "function buy(address token, uint256 usdcIn, uint256 minTokensOut) external",
+  "function sell(address token, uint256 tokenIn, uint256 minUsdcOut) external",
+  "function getPriceUSDCperToken(address token) external view returns (uint256)",
+  "function getReserves(address token) external view returns (uint256 rToken, uint256 rUSDC)",
+  "function poolExists(address token) external view returns (bool)",
+  "event Bought(address indexed token, address indexed buyer, uint256 usdcIn, uint256 fee, uint256 tokensOut)",
+  "event Sold(address indexed token, address indexed seller, uint256 tokensIn, uint256 usdcOut)"
+];
+
+const USDC_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
   "function allowance(address owner, address spender) view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
   "function decimals() view returns (uint8)"
 ];
 
-const BONDING_CURVE_ABI = [
-  "function buy() external payable",
-  "function sell(uint256 tokenAmount) external",
-  "function getPrice() public view returns (uint256)",
-  "function getBuyAmount(uint256 ethSpent) public view returns (uint256)",
-  "function getSellAmount(uint256 tokenAmount) public view returns (uint256)",
-  "function ethBalance() public view returns (uint256)",
-  "function tokenSupply() public view returns (uint256)",
-  "event Buy(address indexed buyer, uint256 ethSent, uint256 tokensReceived)",
-  "event Sell(address indexed seller, uint256 tokensSold, uint256 ethReceived)"
-];
+let provider, signer, userAddress;
 
 connectBtn.onclick = async () => {
   try {
     if (!window.ethereum) return alert("Install MetaMask");
 
-    // Request account access
     provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send("eth_requestAccounts", []);
 
@@ -38,7 +48,6 @@ connectBtn.onclick = async () => {
         params: [{ chainId: '0x14a34' }] // 84532 in hex
       });
     } catch (switchErr) {
-      // If user rejects, they must manually switch
       if (switchErr.code === 4902) {
         alert("Please add Base Sepolia testnet to MetaMask and switch to it");
         return;
@@ -49,12 +58,10 @@ connectBtn.onclick = async () => {
       return;
     }
 
-    // Re-create provider after network switch
     provider = new ethers.BrowserProvider(window.ethereum);
     signer = await provider.getSigner();
     userAddress = await signer.getAddress();
 
-    // Verify we're on Base Sepolia
     const network = await provider.getNetwork();
     if (network.chainId !== 84532n) {
       STATUS.innerText = "❌ Wrong network! Please switch to Base Sepolia testnet (chainId: 84532)";
@@ -107,7 +114,7 @@ async function loadDatasets() {
       priceEl.innerText = "price: loading...";
 
       const buyInput = document.createElement("input");
-      buyInput.placeholder = "ETH to spend (e.g. 0.001)";
+      buyInput.placeholder = "USDC to spend (e.g. 0.1)";
       buyInput.style.width = "140px";
       const buyBtn = document.createElement("button");
       buyBtn.innerText = "Buy";
@@ -147,7 +154,7 @@ async function loadDatasets() {
 
       if (signer) {
         readBalance(tokenAddr, balanceEl);
-        updatePrice(meta.bonding_curve, priceEl);
+        updatePrice(meta.marketplace_address || meta.bonding_curve, tokenAddr, priceEl);
       }
     }
   } catch (err) {
@@ -167,39 +174,45 @@ async function readBalance(tokenAddr, balanceEl) {
   }
 }
 
-async function updatePrice(curveAddr, priceEl) {
+async function updatePrice(marketplaceAddr, tokenAddr, priceEl) {
   try {
     if (!provider) provider = new ethers.BrowserProvider(window.ethereum);
-    if (!curveAddr) {
+    if (!marketplaceAddr) {
       priceEl.innerText = "price: N/A";
       return;
     }
 
-    // Verify contract exists at address
-    const code = await provider.getCode(curveAddr);
+    const code = await provider.getCode(marketplaceAddr);
     if (code === "0x") {
-      console.warn(`No contract at bonding curve address: ${curveAddr}`);
+      console.warn(`No contract at marketplace address: ${marketplaceAddr}`);
       priceEl.innerText = "price: N/A (contract not found)";
       return;
     }
 
-    const curve = new ethers.Contract(curveAddr, BONDING_CURVE_ABI, provider);
-    const price = await curve.getPrice();
-    priceEl.innerText = `price: ${ethers.formatUnits(price, 18)} ETH`;
+    const marketplace = new ethers.Contract(marketplaceAddr, MARKETPLACE_ABI, provider);
+    
+    // Check if pool exists
+    const exists = await marketplace.poolExists(tokenAddr);
+    if (!exists) {
+      priceEl.innerText = "price: pool not initialized";
+      return;
+    }
+
+    const price = await marketplace.getPriceUSDCperToken(tokenAddr);
+    priceEl.innerText = `price: ${ethers.formatUnits(price, 18)} USDC`;
   } catch (err) {
     priceEl.innerText = "price: error";
     console.error("Price update error:", err.message);
   }
 }
 
-async function buyToken(tokenAddr, ethAmountStr, meta) {
-  if (!ethAmountStr || isNaN(Number(ethAmountStr))) {
-    return alert("Enter ETH amount to spend");
+async function buyToken(tokenAddr, usdcAmountStr, meta) {
+  if (!usdcAmountStr || isNaN(Number(usdcAmountStr))) {
+    return alert("Enter USDC amount to spend");
   }
   if (!signer) return alert("Connect wallet first");
-  if (!meta.bonding_curve) return alert("Bonding curve not found");
+  if (!meta.marketplace_address) return alert("Marketplace address not found");
 
-  // Verify network
   try {
     const network = await provider.getNetwork();
     if (network.chainId !== 84532n) {
@@ -211,44 +224,41 @@ async function buyToken(tokenAddr, ethAmountStr, meta) {
     return;
   }
 
-  const ethAmount = ethers.parseEther(String(ethAmountStr));
+  const usdcAmount = ethers.parseUnits(String(usdcAmountStr), 6); // USDC has 6 decimals
 
   try {
     STATUS.innerText = "📊 Calculating tokens...";
 
     if (!provider) provider = new ethers.BrowserProvider(window.ethereum);
 
-    // Verify contract exists
-    const code = await provider.getCode(meta.bonding_curve);
+    const code = await provider.getCode(meta.marketplace_address);
     if (code === "0x") {
-      STATUS.innerText = "❌ Error: Bonding curve contract not found at address";
-      console.error(`No contract at: ${meta.bonding_curve}`);
+      STATUS.innerText = "❌ Error: Marketplace contract not found at address";
+      console.error(`No contract at: ${meta.marketplace_address}`);
       return;
     }
 
-    const curve = new ethers.Contract(meta.bonding_curve, BONDING_CURVE_ABI, signer);
+    const marketplace = new ethers.Contract(meta.marketplace_address, MARKETPLACE_ABI, signer);
+    const usdc = new ethers.Contract(BASE_SEPOLIA_USDC, USDC_ABI, signer);
 
     try {
-      const tokensToReceive = await curve.getBuyAmount(ethAmount);
-      if (tokensToReceive === 0n) {
-        STATUS.innerText = "❌ Insufficient liquidity";
-        return;
+      // Check allowance and approve if needed
+      const allowance = await usdc.allowance(userAddress, meta.marketplace_address);
+      if (allowance < usdcAmount) {
+        STATUS.innerText = "⏳ Approving USDC...";
+        const approveTx = await usdc.approve(meta.marketplace_address, ethers.parseUnits("1000", 6));
+        await approveTx.wait();
+        STATUS.innerText = "✅ Approved, calculating tokens...";
       }
 
-      const displayTokens = ethers.formatUnits(tokensToReceive, 18);
-      const confirmed = confirm(`Buy ~${displayTokens} tokens for ${ethAmountStr} ETH?\n\nConfirm?`);
-
-      if (!confirmed) {
-        STATUS.innerText = "Cancelled";
-        return;
-      }
-
+      // For now, skip getting exact amount and just use minTokensOut = 0
+      // In production, you'd calculate this via the formula
       STATUS.innerText = "⏳ Confirm buy in wallet...";
 
-      const tx = await curve.buy({ value: ethAmount });
+      const tx = await marketplace.buy(tokenAddr, usdcAmount, 0n);
       const receipt = await tx.wait();
 
-      STATUS.innerText = `✅ Buy confirmed! Received ~${displayTokens} tokens`;
+      STATUS.innerText = `✅ Buy confirmed!`;
 
       setTimeout(() => {
         loadDatasets();
@@ -268,9 +278,8 @@ async function sellToken(tokenAddr, tokenAmountStr, meta) {
     return alert("Enter token amount to sell");
   }
   if (!signer) return alert("Connect wallet first");
-  if (!meta.bonding_curve) return alert("Bonding curve not found");
+  if (!meta.marketplace_address) return alert("Marketplace address not found");
 
-  // Verify network
   try {
     const network = await provider.getNetwork();
     if (network.chainId !== 84532n) {
@@ -285,52 +294,37 @@ async function sellToken(tokenAddr, tokenAmountStr, meta) {
   const tokenAmount = ethers.parseUnits(String(tokenAmountStr), 18);
 
   try {
-    STATUS.innerText = "📊 Calculating ETH...";
+    STATUS.innerText = "📊 Calculating USDC...";
 
     if (!provider) provider = new ethers.BrowserProvider(window.ethereum);
 
-    // Verify contract exists
-    const code = await provider.getCode(meta.bonding_curve);
+    const code = await provider.getCode(meta.marketplace_address);
     if (code === "0x") {
-      STATUS.innerText = "❌ Error: Bonding curve contract not found at address";
-      console.error(`No contract at: ${meta.bonding_curve}`);
+      STATUS.innerText = "❌ Error: Marketplace contract not found at address";
+      console.error(`No contract at: ${meta.marketplace_address}`);
       return;
     }
 
-    const curve = new ethers.Contract(meta.bonding_curve, BONDING_CURVE_ABI, signer);
+    const marketplace = new ethers.Contract(meta.marketplace_address, MARKETPLACE_ABI, signer);
     const token = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
 
     try {
-      const ethToReceive = await curve.getSellAmount(tokenAmount);
-      if (ethToReceive === 0n) {
-        STATUS.innerText = "❌ Insufficient liquidity or invalid amount";
-        return;
-      }
-
-      const displayEth = ethers.formatEther(ethToReceive);
-      const confirmed = confirm(`Sell ${tokenAmountStr} tokens for ~${displayEth} ETH?\n\nConfirm?`);
-
-      if (!confirmed) {
-        STATUS.innerText = "Cancelled";
-        return;
-      }
-
       STATUS.innerText = "⏳ Checking approval...";
 
-      const allowance = await token.allowance(userAddress, meta.bonding_curve);
+      const allowance = await token.allowance(userAddress, meta.marketplace_address);
       if (allowance < tokenAmount) {
         STATUS.innerText = "⏳ Approving tokens...";
-        const approveTx = await token.approve(meta.bonding_curve, ethers.parseUnits("1000000000", 18));
+        const approveTx = await token.approve(meta.marketplace_address, ethers.parseUnits("1000000000", 18));
         await approveTx.wait();
         STATUS.innerText = "✅ Approved, now selling...";
       }
 
       STATUS.innerText = "⏳ Confirm sell in wallet...";
 
-      const tx = await curve.sell(tokenAmount);
+      const tx = await marketplace.sell(tokenAddr, tokenAmount, 0n);
       const receipt = await tx.wait();
 
-      STATUS.innerText = `✅ Sell confirmed! Received ~${displayEth} ETH`;
+      STATUS.innerText = `✅ Sell confirmed!`;
 
       setTimeout(() => {
         loadDatasets();
@@ -348,7 +342,6 @@ async function sellToken(tokenAddr, tokenAmountStr, meta) {
 async function burnForAccess(tokenAddr, meta, balanceEl) {
   if (!signer) return alert("Connect wallet first");
 
-  // Verify network
   try {
     const network = await provider.getNetwork();
     if (network.chainId !== 84532n) {
