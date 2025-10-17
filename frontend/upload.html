@@ -1,0 +1,503 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Create Dataset - MYRAD DataCoin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .upload-container {
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .upload-container h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 30px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #555;
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #4CAF50;
+      box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
+    }
+
+    .file-upload {
+      border: 2px dashed #4CAF50;
+      border-radius: 4px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.3s;
+      background: #f0f8f0;
+    }
+
+    .file-upload:hover {
+      background: #e0f5e0;
+    }
+
+    .file-upload input[type="file"] {
+      display: none;
+    }
+
+    .file-upload-text {
+      color: #4CAF50;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .file-upload-sub {
+      color: #999;
+      font-size: 12px;
+    }
+
+    .file-name {
+      margin-top: 10px;
+      padding: 10px;
+      background: white;
+      border-radius: 4px;
+      color: #333;
+      display: none;
+    }
+
+    .file-name.active {
+      display: block;
+    }
+
+    .upload-progress {
+      margin-top: 15px;
+      display: none;
+    }
+
+    .upload-progress.active {
+      display: block;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #eee;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #4CAF50;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: #999;
+      margin-top: 5px;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 30px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: #4CAF50;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #45a049;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+    .btn-primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #999;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #777;
+    }
+
+    .status-message {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .status-message.active {
+      display: block;
+    }
+
+    .status-message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .status-message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .status-message.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: #4CAF50;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    .cid-display {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f5f5f5;
+      border-left: 4px solid #4CAF50;
+      border-radius: 4px;
+      word-break: break-all;
+      font-family: monospace;
+      font-size: 12px;
+      display: none;
+    }
+
+    .cid-display.active {
+      display: block;
+    }
+
+    .info-box {
+      background: #e3f2fd;
+      border-left: 4px solid #2196F3;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+      color: #1565c0;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">← Back to Datasets</a>
+
+    <div class="upload-container">
+      <h1>📤 Create New Dataset Token</h1>
+
+      <div class="info-box">
+        <strong>ℹ️ How it works:</strong> Upload your dataset file, provide details, and we'll create an ERC20 token representing your data. You'll get 5% of tokens, platform gets 5%, and 90% goes to the bonding curve for trading.
+      </div>
+
+      <form id="uploadForm">
+        <!-- File Upload -->
+        <div class="form-group">
+          <label>📁 Dataset File</label>
+          <div class="file-upload" id="fileUpload">
+            <div class="file-upload-text">Click to upload or drag and drop</div>
+            <div class="file-upload-sub">Max size: 10MB (PDF, CSV, JSON, ZIP, etc.)</div>
+            <input type="file" id="fileInput" />
+          </div>
+          <div class="file-name" id="fileName"></div>
+          <div class="upload-progress" id="uploadProgress">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Uploading...</div>
+          </div>
+          <div class="cid-display" id="cidDisplay"></div>
+        </div>
+
+        <!-- Dataset Name -->
+        <div class="form-group">
+          <label for="datasetName">📋 Dataset Name *</label>
+          <input
+            type="text"
+            id="datasetName"
+            placeholder="e.g., Medical Records 2024"
+            required
+          />
+        </div>
+
+        <!-- Token Symbol -->
+        <div class="form-group">
+          <label for="tokenSymbol">🏷️ Token Symbol *</label>
+          <input
+            type="text"
+            id="tokenSymbol"
+            placeholder="e.g., MEDDATA"
+            maxlength="10"
+            pattern="[A-Z0-9]+"
+            required
+          />
+          <small style="color: #999; display: block; margin-top: 5px;">
+            Uppercase letters and numbers only, max 10 characters
+          </small>
+        </div>
+
+        <!-- Description (Optional) -->
+        <div class="form-group">
+          <label for="description">📝 Description (Optional)</label>
+          <textarea
+            id="description"
+            placeholder="Describe your dataset: what it contains, who might be interested, etc."
+          ></textarea>
+        </div>
+
+        <!-- Status Message -->
+        <div class="status-message" id="statusMessage"></div>
+
+        <!-- Buttons -->
+        <div class="button-group">
+          <button type="button" class="btn btn-secondary" onclick="window.history.back()">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">
+            Create Dataset & Token
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.15.0/dist/ethers.umd.min.js"></script>
+  <script>
+    let selectedFile = null;
+    let uploadedCid = null;
+
+    const fileUpload = document.getElementById("fileUpload");
+    const fileInput = document.getElementById("fileInput");
+    const fileName = document.getElementById("fileName");
+    const uploadProgress = document.getElementById("uploadProgress");
+    const progressFill = document.getElementById("progressFill");
+    const progressText = document.getElementById("progressText");
+    const cidDisplay = document.getElementById("cidDisplay");
+    const uploadForm = document.getElementById("uploadForm");
+    const statusMessage = document.getElementById("statusMessage");
+    const submitBtn = document.getElementById("submitBtn");
+
+    // File upload handling
+    fileUpload.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        handleFileSelect(file);
+      }
+    });
+
+    fileUpload.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      fileUpload.style.background = "#e0f5e0";
+    });
+
+    fileUpload.addEventListener("dragleave", () => {
+      fileUpload.style.background = "#f0f8f0";
+    });
+
+    fileUpload.addEventListener("drop", (e) => {
+      e.preventDefault();
+      fileUpload.style.background = "#f0f8f0";
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        handleFileSelect(file);
+      }
+    });
+
+    function handleFileSelect(file) {
+      if (file.size > 10 * 1024 * 1024) {
+        showStatus("File size exceeds 10MB limit", "error");
+        return;
+      }
+
+      selectedFile = file;
+      fileName.textContent = `✅ Selected: ${file.name} (${formatFileSize(file.size)})`;
+      fileName.classList.add("active");
+
+      // Immediately upload the file
+      uploadFile(file);
+    }
+
+    async function uploadFile(file) {
+      try {
+        uploadProgress.classList.add("active");
+        uploadedCid = null;
+        cidDisplay.classList.remove("active");
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            const percent = (e.loaded / e.total) * 100;
+            progressFill.style.width = percent + "%";
+            progressText.textContent = `Uploading: ${Math.round(percent)}%`;
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status === 200) {
+            const response = JSON.parse(xhr.responseText);
+            uploadedCid = response.cid;
+            progressFill.style.width = "100%";
+            progressText.textContent = "✅ Upload complete!";
+
+            cidDisplay.textContent = `IPFS CID: ${uploadedCid}`;
+            cidDisplay.classList.add("active");
+
+            showStatus(
+              `File uploaded successfully! CID: ${uploadedCid}`,
+              "success"
+            );
+          } else {
+            const error = JSON.parse(xhr.responseText);
+            showStatus(`Upload failed: ${error.message}`, "error");
+            uploadProgress.classList.remove("active");
+          }
+        });
+
+        xhr.addEventListener("error", () => {
+          showStatus("Upload failed: Network error", "error");
+          uploadProgress.classList.remove("active");
+        });
+
+        xhr.open("POST", "/upload", true);
+        xhr.send(formData);
+      } catch (err) {
+        showStatus(`Upload error: ${err.message}`, "error");
+        uploadProgress.classList.remove("active");
+      }
+    }
+
+    uploadForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      if (!uploadedCid) {
+        showStatus("Please upload a file first", "error");
+        return;
+      }
+
+      if (!document.getElementById("datasetName").value) {
+        showStatus("Please enter a dataset name", "error");
+        return;
+      }
+
+      if (!document.getElementById("tokenSymbol").value) {
+        showStatus("Please enter a token symbol", "error");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      showStatus("Creating dataset token...", "info");
+
+      try {
+        const response = await fetch("/create-dataset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cid: uploadedCid,
+            name: document.getElementById("datasetName").value,
+            symbol: document.getElementById("tokenSymbol").value,
+            description: document.getElementById("description").value,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          showStatus(`Creation failed: ${data.error || data.message}`, "error");
+          submitBtn.disabled = false;
+          return;
+        }
+
+        showStatus(
+          `✅ Dataset created successfully! Token: ${data.tokenAddress}`,
+          "success"
+        );
+
+        // Redirect after 2 seconds
+        setTimeout(() => {
+          window.location.href = "index.html";
+        }, 2000);
+      } catch (err) {
+        showStatus(`Error: ${err.message}`, "error");
+        submitBtn.disabled = false;
+      }
+    });
+
+    function showStatus(message, type) {
+      statusMessage.textContent = message;
+      statusMessage.className = `status-message active ${type}`;
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return "0 Bytes";
+      const k = 1024;
+      const sizes = ["Bytes", "KB", "MB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+    }
+  </script>
+</body>
+</html>
