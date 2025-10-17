@@ -19,33 +19,22 @@ contract BondingCurve is ReentrancyGuard {
         token = IERC20(_token);
         creator = _creator;
         platform = _platform;
-        ethBalance = 0;
-        tokenSupply = 0;
-    }
-
-    // Initialize bonding curve with initial token balance and ETH
-    function initialize(uint256 initialTokens) external {
-        require(msg.sender == creator, "Only creator can initialize");
-        require(tokenSupply == 0, "Already initialized");
-
-        uint256 contractTokenBalance = token.balanceOf(address(this));
-        require(contractTokenBalance >= initialTokens, "Insufficient tokens in contract");
-
-        tokenSupply = initialTokens;
-        ethBalance = address(this).balance;
-
-        require(tokenSupply > 0 && ethBalance > 0, "Need tokens and ETH for initialization");
     }
 
     function getPrice() public view returns (uint256) {
-        if (tokenSupply == 0) return 0;
-        return (ethBalance * 1e18) / tokenSupply;
+        uint256 contractTokenBalance = token.balanceOf(address(this));
+        uint256 contractEthBalance = address(this).balance;
+
+        if (contractTokenBalance == 0) return 0;
+        return (contractEthBalance * 1e18) / contractTokenBalance;
     }
 
     function getBuyAmount(uint256 ethSpent) public view returns (uint256) {
         if (ethSpent == 0) return 0;
 
         uint256 currentPrice = getPrice();
+        uint256 contractTokenBalance = token.balanceOf(address(this));
+        uint256 contractEthBalance = address(this).balance;
 
         // Handle initial buy when price is 0
         if (currentPrice == 0) {
@@ -53,7 +42,7 @@ contract BondingCurve is ReentrancyGuard {
             return ethSpent * 1e18;
         }
 
-        uint256 newPrice = ((ethBalance + ethSpent) * 1e18) / (tokenSupply + ethSpent / currentPrice);
+        uint256 newPrice = ((contractEthBalance + ethSpent) * 1e18) / (contractTokenBalance + ethSpent / currentPrice);
         uint256 avgPrice = (currentPrice + newPrice) / 2;
 
         uint256 tokensToAdd = ethSpent / avgPrice;
@@ -62,12 +51,16 @@ contract BondingCurve is ReentrancyGuard {
 
     function getSellAmount(uint256 tokenAmount) public view returns (uint256) {
         if (tokenAmount == 0) return 0;
-        if (tokenAmount > tokenSupply) return 0;
-        if (tokenSupply == 0) return 0;
 
-        uint256 newSupply = tokenSupply - tokenAmount;
-        uint256 newEthBalance = (newSupply > 0) ? (newSupply * ethBalance) / tokenSupply : 0;
-        uint256 ethToReturn = ethBalance - newEthBalance;
+        uint256 contractTokenBalance = token.balanceOf(address(this));
+        uint256 contractEthBalance = address(this).balance;
+
+        if (tokenAmount > contractTokenBalance) return 0;
+        if (contractTokenBalance == 0) return 0;
+
+        uint256 newSupply = contractTokenBalance - tokenAmount;
+        uint256 newEthBalance = (newSupply > 0) ? (newSupply * contractEthBalance) / contractTokenBalance : 0;
+        uint256 ethToReturn = contractEthBalance - newEthBalance;
 
         return ethToReturn;
     }
