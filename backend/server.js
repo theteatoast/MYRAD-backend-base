@@ -136,6 +136,45 @@ app.get("/access/:user/:symbol", (req, res) => {
   });
 });
 
+// Upload file to Lighthouse and get CID
+app.post("/upload", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file provided" });
+    }
+
+    console.log(`📤 Uploading file: ${req.file.originalname}`);
+
+    // Convert file buffer to base64 for upload
+    const base64Data = req.file.buffer.toString("base64");
+
+    // Upload to Lighthouse
+    const cid = await uploadBase64ToLighthouse(base64Data, req.file.originalname);
+
+    console.log(`✅ File uploaded, CID: ${cid}`);
+
+    res.json({
+      success: true,
+      cid: cid,
+      filename: req.file.originalname,
+      size: req.file.size,
+      ipfsUrl: `ipfs://${cid}`,
+      gatewayUrl: `https://gateway.lighthouse.storage/ipfs/${cid}`,
+    });
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).json({
+      error: "Upload failed",
+      message: err.message,
+    });
+  }
+});
+
+// Health check
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: Date.now() });
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Backend API running on port ${PORT}`);
   console.log(`📊 Open http://localhost:${PORT}`);
