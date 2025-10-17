@@ -171,6 +171,49 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+// Create dataset token (after file upload and form submission)
+app.post("/create-dataset", async (req, res) => {
+  try {
+    const { cid, name, symbol, description } = req.body;
+
+    if (!cid || !name || !symbol) {
+      return res.status(400).json({
+        error: "Missing required fields: cid, name, symbol",
+      });
+    }
+
+    // Validate symbol format
+    if (!/^[A-Z0-9]{1,10}$/.test(symbol)) {
+      return res.status(400).json({
+        error: "Symbol must be 1-10 uppercase letters/numbers",
+      });
+    }
+
+    console.log(`\n📝 Creating dataset: ${name} (${symbol})`);
+    console.log(`   CID: ${cid}`);
+    console.log(`   Description: ${description || "N/A"}`);
+
+    // Create token on blockchain
+    const result = await createDatasetToken(cid, name, symbol, description || "");
+
+    res.json({
+      success: true,
+      tokenAddress: result.tokenAddress,
+      curveAddress: result.curveAddress,
+      symbol: result.symbol,
+      name: result.name,
+      cid: result.cid,
+      message: "Dataset created successfully",
+    });
+  } catch (err) {
+    console.error("Dataset creation error:", err);
+    res.status(500).json({
+      error: "Failed to create dataset",
+      message: err.message,
+    });
+  }
+});
+
 // Health check
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });
