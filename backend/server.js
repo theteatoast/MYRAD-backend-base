@@ -177,6 +177,7 @@ app.post("/create-dataset", async (req, res) => {
     const { cid, name, symbol, description } = req.body;
 
     if (!cid || !name || !symbol) {
+      console.warn("Missing required fields");
       return res.status(400).json({
         error: "Missing required fields: cid, name, symbol",
       });
@@ -184,6 +185,7 @@ app.post("/create-dataset", async (req, res) => {
 
     // Validate symbol format
     if (!/^[A-Z0-9]{1,10}$/.test(symbol)) {
+      console.warn(`Invalid symbol format: ${symbol}`);
       return res.status(400).json({
         error: "Symbol must be 1-10 uppercase letters/numbers",
       });
@@ -195,16 +197,23 @@ app.post("/create-dataset", async (req, res) => {
 
     // Check if FACTORY_ADDRESS is set
     if (!process.env.FACTORY_ADDRESS) {
+      console.warn("FACTORY_ADDRESS not configured");
       return res.status(400).json({
         error: "FACTORY_ADDRESS not configured",
         message: "Please deploy factory first and set FACTORY_ADDRESS in .env",
       });
     }
 
+    console.log(`   Factory: ${process.env.FACTORY_ADDRESS}`);
+
     // Create token on blockchain
+    console.log("   Starting token creation...");
     const result = await createDatasetToken(cid, name, symbol, description || "");
 
-    res.json({
+    console.log(`   ✅ Token created: ${result.tokenAddress}`);
+    console.log(`   ✅ Curve created: ${result.curveAddress}`);
+
+    const responseData = {
       success: true,
       tokenAddress: result.tokenAddress,
       curveAddress: result.curveAddress,
@@ -212,9 +221,13 @@ app.post("/create-dataset", async (req, res) => {
       name: result.name,
       cid: result.cid,
       message: "Dataset created successfully",
-    });
+    };
+
+    console.log("   Sending response:", JSON.stringify(responseData));
+    res.json(responseData);
   } catch (err) {
-    console.error("Dataset creation error:", err);
+    console.error("❌ Dataset creation error:", err.message);
+    console.error("   Stack:", err.stack);
 
     // Provide more specific error messages
     let errorMessage = err.message;
@@ -224,12 +237,20 @@ app.post("/create-dataset", async (req, res) => {
       errorMessage = "Contract artifacts not found. Run: npx hardhat compile";
     } else if (err.message.includes("nonce")) {
       errorMessage = "Transaction nonce error. Check RPC connection.";
+    } else if (err.message.includes("insufficient")) {
+      errorMessage = "Insufficient balance for gas. Get more testnet ETH.";
+    } else if (err.message.includes("timeout")) {
+      errorMessage = "RPC request timeout. Check network connection.";
     }
 
-    res.status(500).json({
+    const errorResponse = {
       error: "Failed to create dataset",
       message: errorMessage,
-    });
+      details: err.message,
+    };
+
+    console.log("   Sending error response:", JSON.stringify(errorResponse));
+    res.status(500).json(errorResponse);
   }
 });
 
