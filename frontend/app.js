@@ -26,13 +26,44 @@ const BONDING_CURVE_ABI = [
 connectBtn.onclick = async () => {
   try {
     if (!window.ethereum) return alert("Install MetaMask");
+
+    // Request account access
     provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send("eth_requestAccounts", []);
+
+    // Force switch to Base Sepolia testnet (chainId: 84532)
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x14a34' }] // 84532 in hex
+      });
+    } catch (switchErr) {
+      // If user rejects, they must manually switch
+      if (switchErr.code === 4902) {
+        alert("Please add Base Sepolia testnet to MetaMask and switch to it");
+        return;
+      }
+      if (switchErr.code !== 4001) {
+        console.error("Network switch error:", switchErr);
+      }
+      return;
+    }
+
+    // Re-create provider after network switch
+    provider = new ethers.BrowserProvider(window.ethereum);
     signer = await provider.getSigner();
     userAddress = await signer.getAddress();
+
+    // Verify we're on Base Sepolia
+    const network = await provider.getNetwork();
+    if (network.chainId !== 84532n) {
+      STATUS.innerText = "❌ Wrong network! Please switch to Base Sepolia testnet (chainId: 84532)";
+      return;
+    }
+
     document.getElementById("addr").innerText = shorten(userAddress);
     connectBtn.style.display = "none";
-    STATUS.innerText = "✅ Wallet connected: " + userAddress;
+    STATUS.innerText = "✅ Wallet connected: " + userAddress + " (Base Sepolia testnet)";
     loadDatasets();
   } catch (err) {
     console.error("Connect error", err);
