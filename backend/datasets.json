@@ -1,15 +1,1 @@
-{
-  "0xdcbfa10e65e0a2a4e91990e8702f60789bb9df0a": {
-    "symbol": "DS1",
-    "cid": "ipfs://bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34"
-  },
-  "0x4f048fb017e7345dd8b378d779438165ee308395": {
-    "symbol": "KOMEDI",
-    "cid": "bafkreidalzebf3rc67xmcjhgezqf5nqr65lycih2a5sinpcowajnbhr6ca",
-    "bonding_curve": "0x959bf463bbcaa4ff2f8ce4266880c6b52d660c00",
-    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
-    "name": "Komedi Dataset",
-    "description": "KOMEDI",
-    "timestamp": 1760713531948
-  }
-}
+{}
