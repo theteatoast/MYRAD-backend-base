@@ -202,8 +202,9 @@ if (provider instanceof ethers.WebSocketProvider) {
                 const from = parsed.args.from;
                 const to = parsed.args.to;
                 const value = parsed.args.value;
-                if (to === ethers.ZeroAddress) {
-                  console.log(`Poll-detected burn: ${from} burned ${ethers.formatUnits(value, 18)} on ${token}`);
+                const toAddr = typeof to === 'string' ? to.toLowerCase() : ethers.getAddress(to).toLowerCase();
+                if (toAddr === ethers.ZeroAddress.toLowerCase()) {
+                  console.log(`🔥 Poll-detected burn: ${from} burned ${ethers.formatUnits(value, 18)} on ${token}`);
                   handleRedeemOrBurn(token, from, value, datasets[token].symbol);
                 }
               } else if (parsed.name === "Redeemed") {
