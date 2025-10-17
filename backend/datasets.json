@@ -1,1 +1,9 @@
-{}
+{
+  "0xa71fb9bf95fcc396d0696444a85789db03b57e88": {
+    "symbol": "PERFECT",
+    "cid": "bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34",
+    "bonding_curve": "0xbbd4e7724a4b45fe445332712fa712f8eb1c7b20",
+    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
+    "timestamp": 1760716666023
+  }
+}
