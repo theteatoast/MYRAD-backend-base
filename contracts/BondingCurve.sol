@@ -40,8 +40,6 @@ contract BondingCurve is ReentrancyGuard {
         }
 
         uint256 newPrice = ((ethBalance + ethSpent) * 1e18) / (tokenSupply + ethSpent / currentPrice);
-
-        uint256 priceIncrease = newPrice - currentPrice;
         uint256 avgPrice = (currentPrice + newPrice) / 2;
 
         uint256 tokensToAdd = ethSpent / avgPrice;
