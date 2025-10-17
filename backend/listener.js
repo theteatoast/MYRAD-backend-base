@@ -77,8 +77,10 @@ if (provider instanceof ethers.WebSocketProvider) {
 
       contract.on("Transfer", (from, to, value, event) => {
         try {
-          if (to === ethers.ZeroAddress) {
-            console.log(`Transfer burn detected (WS): ${from} burned ${ethers.formatUnits(value, 18)} ${meta.symbol}`);
+          // Convert to lowercase for comparison since ethers returns checksummed addresses
+          const toAddr = typeof to === 'string' ? to.toLowerCase() : ethers.getAddress(to).toLowerCase();
+          if (toAddr === ethers.ZeroAddress.toLowerCase()) {
+            console.log(`🔥 Transfer burn detected (WS): ${from} burned ${ethers.formatUnits(value, 18)} ${meta.symbol}`);
             handleRedeemOrBurn(addr, from, value, meta.symbol);
           }
         } catch (err) {
