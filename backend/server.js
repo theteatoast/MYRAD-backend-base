@@ -193,6 +193,14 @@ app.post("/create-dataset", async (req, res) => {
     console.log(`   CID: ${cid}`);
     console.log(`   Description: ${description || "N/A"}`);
 
+    // Check if FACTORY_ADDRESS is set
+    if (!process.env.FACTORY_ADDRESS) {
+      return res.status(400).json({
+        error: "FACTORY_ADDRESS not configured",
+        message: "Please deploy factory first and set FACTORY_ADDRESS in .env",
+      });
+    }
+
     // Create token on blockchain
     const result = await createDatasetToken(cid, name, symbol, description || "");
 
@@ -207,9 +215,20 @@ app.post("/create-dataset", async (req, res) => {
     });
   } catch (err) {
     console.error("Dataset creation error:", err);
+
+    // Provide more specific error messages
+    let errorMessage = err.message;
+    if (err.message.includes("FACTORY_ADDRESS")) {
+      errorMessage = "Factory address not configured. Deploy factory first.";
+    } else if (err.message.includes("not found")) {
+      errorMessage = "Contract artifacts not found. Run: npx hardhat compile";
+    } else if (err.message.includes("nonce")) {
+      errorMessage = "Transaction nonce error. Check RPC connection.";
+    }
+
     res.status(500).json({
       error: "Failed to create dataset",
-      message: err.message,
+      message: errorMessage,
     });
   }
 });
