@@ -348,6 +348,18 @@ async function sellToken(tokenAddr, tokenAmountStr, meta) {
 async function burnForAccess(tokenAddr, meta, balanceEl) {
   if (!signer) return alert("Connect wallet first");
 
+  // Verify network
+  try {
+    const network = await provider.getNetwork();
+    if (network.chainId !== 84532n) {
+      STATUS.innerText = "❌ Wrong network! Must be on Base Sepolia testnet (84532)";
+      return;
+    }
+  } catch (err) {
+    STATUS.innerText = "❌ Network error: " + err.message;
+    return;
+  }
+
   try {
     STATUS.innerText = "🔥 Sending burn transaction...";
 
