@@ -139,6 +139,12 @@ async function main() {
   await txLiquidity.wait();
   console.log(`   ✅ Sent ${ethers.formatEther(INITIAL_LIQUIDITY_ETH)} ETH to bonding curve`);
 
+  // Initialize bonding curve state
+  console.log(`   🔧 Initializing bonding curve state...`);
+  const txInit = await curve.initialize(LIQUIDITY_ALLOCATION, { nonce: nonce++ });
+  await txInit.wait();
+  console.log(`   ✅ Bonding curve initialized with balances`);
+
   // Verify bonding curve state
   const ethBal = await provider.getBalance(curveAddr);
   const tokenBal = await token.balanceOf(curveAddr);
