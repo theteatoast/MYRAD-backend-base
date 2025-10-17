@@ -1,1 +1,9 @@
-{}
+{
+  "0xf3150268d7b36b2a16b9c9619cb9ec4f00f176c3": {
+    "symbol": "DEMO",
+    "cid": "bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34",
+    "bonding_curve": "0x5f3694c4c1bd8d2a3567e0040b634422acb3847a",
+    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
+    "timestamp": 1760714752493
+  }
+}
