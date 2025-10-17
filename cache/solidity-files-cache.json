@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/app/code/contracts/BondingCurve.sol": {
-      "lastModificationDate": 1760713812546,
-      "contentHash": "0c56596b177d4484c1a68016b03091ac",
+      "lastModificationDate": 1760713828706,
+      "contentHash": "f8d4cba5937dfb93c7487a13272fbb25",
       "sourceName": "contracts/BondingCurve.sol",
       "solcConfig": {
         "version": "0.8.18",
