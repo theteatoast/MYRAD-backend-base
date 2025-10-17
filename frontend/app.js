@@ -4,7 +4,7 @@ const datasetsDiv = document.getElementById("datasets");
 const BACKEND_BASE = "";
 
 // USDC on Base Sepolia (6 decimals)
-const BASE_SEPOLIA_USDC = "0x036CbD53842c5426634E7929541eC2318f3dCF7e";
+const BASE_SEPOLIA_USDC = "0x036cbd53842c5426634e7929541ec2318f3dcf7e";
 
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
