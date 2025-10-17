@@ -10,20 +10,16 @@ contract DataCoin is ERC20 {
     constructor(
         string memory name_,
         string memory symbol_,
-        uint256 initialSupply_,
+        uint256 totalSupply_,
         address creator_,
         string memory cid_
     ) ERC20(name_, symbol_) {
         creator = creator_;
         datasetCid = cid_;
-        if (initialSupply_ > 0) {
-            _mint(creator_, initialSupply_);
+        // Mint all tokens at once - no separate mint calls needed
+        if (totalSupply_ > 0) {
+            _mint(msg.sender, totalSupply_);
         }
-    }
-
-    function mint(address to, uint256 amount) external {
-        require(msg.sender == creator, "Only creator can mint");
-        _mint(to, amount);
     }
 
     function burn(uint256 amount) external {
