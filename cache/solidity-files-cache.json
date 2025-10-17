@@ -148,8 +148,8 @@
       ]
     },
     "/app/code/contracts/DataCoin.sol": {
-      "lastModificationDate": 1760714717852,
-      "contentHash": "9bb4b902ead037868bc900dc01a85445",
+      "lastModificationDate": 1760716067995,
+      "contentHash": "2a72f56a5459903d8501f3e91892e5ce",
       "sourceName": "contracts/DataCoin.sol",
       "solcConfig": {
         "version": "0.8.18",
@@ -175,8 +175,7 @@
         }
       },
       "imports": [
-        "@openzeppelin/contracts/token/ERC20/ERC20.sol",
-        "@openzeppelin/contracts/access/AccessControl.sol"
+        "@openzeppelin/contracts/token/ERC20/ERC20.sol"
       ],
       "versionPragmas": [
         "^0.8.18"
