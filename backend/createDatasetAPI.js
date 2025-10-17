@@ -111,22 +111,28 @@ async function createDatasetToken(cid, name, symbol, description) {
     console.log(`\n💳 Step 2: Distributing token allocations...`);
     const token = new ethers.Contract(tokenAddr, tokenArtifact.abi, wallet);
 
+    // Add delay to prevent RPC throttling
+    await new Promise(r => setTimeout(r, 3000));
+
     // Transfer platform allocation
     const txPlatformTransfer = await token.transfer(
       ethers.getAddress(platformWallet),
       PLATFORM_ALLOCATION,
-      { nonce: nonce++ }
+      { nonce: nonce++, gasLimit: 100000 }
     );
     await txPlatformTransfer.wait();
     console.log(
       `   ✅ Platform: ${ethers.formatUnits(PLATFORM_ALLOCATION, 18)} tokens`
     );
 
+    // Add delay between transfers
+    await new Promise(r => setTimeout(r, 3000));
+
     // Transfer marketplace allocation
     const txMarketplaceTransfer = await token.transfer(
       ethers.getAddress(marketplaceAddr),
       LIQUIDITY_ALLOCATION,
-      { nonce: nonce++ }
+      { nonce: nonce++, gasLimit: 100000 }
     );
     await txMarketplaceTransfer.wait();
     console.log(
@@ -138,6 +144,9 @@ async function createDatasetToken(cid, name, symbol, description) {
     console.log(
       `   ✅ Creator: ${ethers.formatUnits(creatorBalance, 18)} tokens`
     );
+
+    // Add delay before next step
+    await new Promise(r => setTimeout(r, 3000));
 
     // Step 3: Initialize pool in marketplace with USDC
     console.log(`\n💧 Step 3: Initializing USDC liquidity pool...`);
