@@ -2,10 +2,9 @@
 pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract DataCoin is ERC20, AccessControl {
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+contract DataCoin is ERC20 {
+    address public creator;
     string public datasetCid;
 
     constructor(
@@ -15,15 +14,15 @@ contract DataCoin is ERC20, AccessControl {
         address creator_,
         string memory cid_
     ) ERC20(name_, symbol_) {
-        _grantRole(DEFAULT_ADMIN_ROLE, creator_);    // creator is admin
-        _grantRole(MINTER_ROLE, creator_);           // creator can mint
+        creator = creator_;
         datasetCid = cid_;
         if (initialSupply_ > 0) {
             _mint(creator_, initialSupply_);
         }
     }
 
-    function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
+    function mint(address to, uint256 amount) external {
+        require(msg.sender == creator, "Only creator can mint");
         _mint(to, amount);
     }
 
