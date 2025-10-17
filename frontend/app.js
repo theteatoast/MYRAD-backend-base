@@ -144,12 +144,20 @@ async function updatePrice(curveAddr, priceEl) {
       return;
     }
 
+    // Verify contract exists at address
+    const code = await provider.getCode(curveAddr);
+    if (code === "0x") {
+      console.warn(`No contract at bonding curve address: ${curveAddr}`);
+      priceEl.innerText = "price: N/A (contract not found)";
+      return;
+    }
+
     const curve = new ethers.Contract(curveAddr, BONDING_CURVE_ABI, provider);
     const price = await curve.getPrice();
     priceEl.innerText = `price: ${ethers.formatUnits(price, 18)} ETH`;
   } catch (err) {
     priceEl.innerText = "price: error";
-    console.error(err);
+    console.error("Price update error:", err.message);
   }
 }
 
