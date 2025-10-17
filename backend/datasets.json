@@ -1,11 +1,1 @@
-{
-  "0x2828e0c9e6c7810603d8305d3c9a4cab74d4ff8d": {
-    "symbol": "KOMEDI",
-    "cid": "bafkreiclkzlrf6cfofkwtrjprg54op677zvwa57yn3mpyzii2bdb4e4lru",
-    "bonding_curve": "0xca160e1a3ffb8afa7a2402931842f2b349004a99",
-    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
-    "name": "Komedi Dataset",
-    "description": "KOMEDI OR WOT",
-    "timestamp": 1760720806517
-  }
-}
+{}
