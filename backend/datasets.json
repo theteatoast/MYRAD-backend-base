@@ -5,14 +5,5 @@
     "bonding_curve": "0xa10cb9e0122d5bf101de675222acf1cca5c67a27",
     "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
     "timestamp": 1760714164102
-  },
-  "0xa30a7678929c6e8d6cb03a8c9fdbd9061b889eed": {
-    "symbol": "KOMEDI",
-    "cid": "bafkreidalzebf3rc67xmcjhgezqf5nqr65lycih2a5sinpcowajnbhr6ca",
-    "bonding_curve": "0x517852e31d266bcec16871296038f1fb12c37b85",
-    "creator": "0x342f483f1ddfcde701e7db281c6e56ac4c7b05c9",
-    "name": "Komedi Dataset",
-    "description": "KOMEDI",
-    "timestamp": 1760714471777
   }
 }
