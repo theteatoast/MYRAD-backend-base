@@ -51,6 +51,7 @@ contract BondingCurve is ReentrancyGuard {
     function getSellAmount(uint256 tokenAmount) public view returns (uint256) {
         if (tokenAmount == 0) return 0;
         if (tokenAmount > tokenSupply) return 0;
+        if (tokenSupply == 0) return 0;
 
         uint256 newSupply = tokenSupply - tokenAmount;
         uint256 newEthBalance = (newSupply > 0) ? (newSupply * ethBalance) / tokenSupply : 0;
