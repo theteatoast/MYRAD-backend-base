@@ -462,61 +462,86 @@
           description: document.getElementById("description").value,
         };
 
-        console.log("Sending payload:", payload);
+        console.log("Sending payload:", JSON.stringify(payload));
 
-        const response = await fetch("/create-dataset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+        // Use XMLHttpRequest to avoid response stream issues
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+
+          xhr.addEventListener("load", () => {
+            try {
+              console.log("XHR load event. Status:", xhr.status);
+              console.log("Response text:", xhr.responseText);
+
+              let data = {};
+              if (xhr.responseText) {
+                try {
+                  data = JSON.parse(xhr.responseText);
+                } catch (parseErr) {
+                  console.error("Parse error:", parseErr);
+                  showStatus(`Server error: Invalid response format`, "error");
+                  submitBtn.disabled = false;
+                  resolve(false);
+                  return;
+                }
+              }
+
+              if (xhr.status >= 400) {
+                const errorMsg = data.error || data.message || `Server error (${xhr.status})`;
+                showStatus(`Creation failed: ${errorMsg}`, "error");
+                submitBtn.disabled = false;
+                resolve(false);
+                return;
+              }
+
+              if (!data.tokenAddress) {
+                console.error("No token address in response:", data);
+                showStatus(`Creation failed: No token address returned`, "error");
+                submitBtn.disabled = false;
+                resolve(false);
+                return;
+              }
+
+              showStatus(
+                `✅ Dataset created successfully! Token: ${data.tokenAddress}`,
+                "success"
+              );
+
+              // Redirect after 2 seconds
+              setTimeout(() => {
+                window.location.href = "index.html";
+              }, 2000);
+
+              resolve(true);
+            } catch (err) {
+              console.error("Handler error:", err);
+              showStatus(`Error: ${err.message}`, "error");
+              submitBtn.disabled = false;
+              resolve(false);
+            }
+          });
+
+          xhr.addEventListener("error", () => {
+            console.error("XHR error");
+            showStatus(`Network error: Failed to connect to server`, "error");
+            submitBtn.disabled = false;
+            resolve(false);
+          });
+
+          xhr.addEventListener("timeout", () => {
+            console.error("XHR timeout");
+            showStatus(`Timeout: Server took too long to respond`, "error");
+            submitBtn.disabled = false;
+            resolve(false);
+          });
+
+          xhr.open("POST", "/create-dataset", true);
+          xhr.setRequestHeader("Content-Type", "application/json");
+          xhr.timeout = 60000; // 60 second timeout
+
+          console.log("Sending XHR request...");
+          xhr.send(JSON.stringify(payload));
         });
-
-        console.log("Response received. Status:", response.status);
-
-        // Clone the response to avoid stream issues
-        const clonedResponse = response.clone();
-
-        let data = {};
-        let responseText = "";
-
-        try {
-          responseText = await response.text();
-          if (responseText) {
-            data = JSON.parse(responseText);
-          }
-        } catch (err) {
-          console.error("Error parsing response:", err);
-          console.log("Raw response text:", responseText);
-          showStatus(`Server error: Invalid response from server`, "error");
-          submitBtn.disabled = false;
-          return;
-        }
-
-        console.log("Parsed data:", data);
-        console.log("Response ok:", response.ok);
-
-        if (!response.ok) {
-          const errorMsg = data.error || data.message || `Server error (${response.status})`;
-          showStatus(`Creation failed: ${errorMsg}`, "error");
-          submitBtn.disabled = false;
-          return;
-        }
-
-        if (!data.tokenAddress) {
-          console.error("No token address in response:", data);
-          showStatus(`Creation failed: No token address returned`, "error");
-          submitBtn.disabled = false;
-          return;
-        }
-
-        showStatus(
-          `✅ Dataset created successfully! Token: ${data.tokenAddress}`,
-          "success"
-        );
-
-        // Redirect after 2 seconds
-        setTimeout(() => {
-          window.location.href = "index.html";
-        }, 2000);
       } catch (err) {
         console.error("Creation error:", err);
         console.error("Error stack:", err.stack);
