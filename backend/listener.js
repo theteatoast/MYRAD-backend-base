@@ -5,11 +5,41 @@
 const { ethers } = require("ethers");
 const fs = require("fs");
 const path = require("path");
-const { RPC, DATASETS_FILE } = require("./config");
+const { RPC_URLS, DATASETS_FILE } = require("./config");
 const { signDownloadUrl, saveAccess } = require("./utils");
 
-const POLL_INTERVAL = 8000; // 8s polling when using HTTP
+const POLL_INTERVAL = 30000; // 30s polling when using HTTP (reduced to avoid rate limits)
 const LAST_BLOCK_FILE = path.join(__dirname, "lastBlock.json");
+
+// Create provider - will use first available RPC
+function createProvider() {
+  const rpcUrl = RPC_URLS[0];
+  console.log(`Using JsonRpcProvider (HTTP) for RPC: ${rpcUrl}`);
+  return new ethers.JsonRpcProvider(rpcUrl);
+}
+
+// Helper to try multiple RPCs for getLogs
+async function getLogsWithFallback(address, fromBlock, toBlock, topics) {
+  for (let i = 0; i < RPC_URLS.length; i++) {
+    try {
+      const provider = new ethers.JsonRpcProvider(RPC_URLS[i]);
+      const logs = await provider.getLogs({
+        address,
+        fromBlock,
+        toBlock,
+        topics
+      });
+      return logs;
+    } catch (err) {
+      if (i < RPC_URLS.length - 1) {
+        console.warn(`⚠️  RPC ${RPC_URLS[i]} failed, trying next...`);
+      } else {
+        throw err; // All RPCs failed
+      }
+    }
+  }
+  return [];
+}
 
 function loadDatasets() {
   if (!fs.existsSync(DATASETS_FILE)) return {};
@@ -48,15 +78,8 @@ async function handleRedeemOrBurn(tokenAddr, userAddress, amount, symbol) {
   saveAccess(entry);
 }
 
-// ---- decide provider: WebSocket if RPC starts with ws, otherwise JsonRpc (HTTP) ----
-let provider;
-if (RPC.startsWith("ws://") || RPC.startsWith("wss://")) {
-  console.log("Using WebSocketProvider for RPC:", RPC);
-  provider = new ethers.WebSocketProvider(RPC);
-} else {
-  console.log("Using JsonRpcProvider (HTTP) for RPC:", RPC);
-  provider = new ethers.JsonRpcProvider(RPC);
-}
+// ---- Create provider ----
+let provider = createProvider();
 
 // Minimal ABIs
 const ERC20_ABI = [
@@ -77,10 +100,8 @@ if (provider instanceof ethers.WebSocketProvider) {
 
       contract.on("Transfer", (from, to, value, event) => {
         try {
-          // Convert to lowercase for comparison since ethers returns checksummed addresses
-          const toAddr = typeof to === 'string' ? to.toLowerCase() : ethers.getAddress(to).toLowerCase();
-          if (toAddr === ethers.ZeroAddress.toLowerCase()) {
-            console.log(`🔥 Transfer burn detected (WS): ${from} burned ${ethers.formatUnits(value, 18)} ${meta.symbol}`);
+          if (to === ethers.ZeroAddress) {
+            console.log(`Transfer burn detected (WS): ${from} burned ${ethers.formatUnits(value, 18)} ${meta.symbol}`);
             handleRedeemOrBurn(addr, from, value, meta.symbol);
           }
         } catch (err) {
@@ -112,11 +133,7 @@ if (provider instanceof ethers.WebSocketProvider) {
           console.log("👀 WS subscribing new token:", addr, meta.symbol);
           contract.on("Transfer", (from, to, value, event) => {
             try {
-              const toAddr = typeof to === 'string' ? to.toLowerCase() : ethers.getAddress(to).toLowerCase();
-              if (toAddr === ethers.ZeroAddress.toLowerCase()) {
-                console.log(`🔥 Transfer burn detected (WS new token): ${from} burned ${ethers.formatUnits(value, 18)}`);
-                handleRedeemOrBurn(addr, from, value, meta.symbol);
-              }
+              if (to === ethers.ZeroAddress) handleRedeemOrBurn(addr, from, value, meta.symbol);
             } catch (e) { console.error(e); }
           });
           contract.on("Redeemed", (user, amount, ticker, event) => {
@@ -160,7 +177,7 @@ if (provider instanceof ethers.WebSocketProvider) {
         // for each token, query logs from lastBlock+1 .. latest
         const from = lastBlock + 1;
         const to = latest;
-        // topics for Transfer and Redeemed (using ethers.js v6 method)
+        // topics for Transfer and Redeemed (using ethers.id to get topic hash)
         const iface = new ethers.Interface(ERC20_ABI.concat(REDEEMED_ABI));
         const transferTopic = ethers.id("Transfer(address,address,uint256)");
         const redeemedTopic = ethers.id("Redeemed(address,uint256,string)");
@@ -177,13 +194,13 @@ if (provider instanceof ethers.WebSocketProvider) {
 
           let logs = [];
           try {
-            logs = await provider.getLogs(filter);
+            logs = await getLogsWithFallback(token, from, to, [[transferTopic, redeemedTopic]]);
           } catch (err) {
-            // provider may reject large range queries; fall back to smaller window
-            console.warn("getLogs error, falling back to per-block:", err.message ? err.message : err);
+            // All RPCs may reject large range queries; fall back to smaller window
+            console.warn("getLogs error on all RPCs, falling back to per-block");
             for (let b = from; b <= to; b++) {
               try {
-                const small = await provider.getLogs({ address: token, fromBlock: b, toBlock: b, topics: [ [transferTopic, redeemedTopic] ] });
+                const small = await getLogsWithFallback(token, b, b, [[transferTopic, redeemedTopic]]);
                 if (small && small.length) logs.push(...small);
               } catch (e) {
                 // ignore single-block failures
@@ -202,9 +219,8 @@ if (provider instanceof ethers.WebSocketProvider) {
                 const from = parsed.args.from;
                 const to = parsed.args.to;
                 const value = parsed.args.value;
-                const toAddr = typeof to === 'string' ? to.toLowerCase() : ethers.getAddress(to).toLowerCase();
-                if (toAddr === ethers.ZeroAddress.toLowerCase()) {
-                  console.log(`🔥 Poll-detected burn: ${from} burned ${ethers.formatUnits(value, 18)} on ${token}`);
+                if (to === ethers.ZeroAddress) {
+                  console.log(`Poll-detected burn: ${from} burned ${ethers.formatUnits(value, 18)} on ${token}`);
                   handleRedeemOrBurn(token, from, value, datasets[token].symbol);
                 }
               } else if (parsed.name === "Redeemed") {

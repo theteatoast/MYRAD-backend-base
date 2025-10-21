@@ -20,7 +20,6 @@ const CREATOR_ALLOCATION = (TOTAL_SUPPLY * 5n) / 100n; // 5% to creator
 const PLATFORM_ALLOCATION = (TOTAL_SUPPLY * 5n) / 100n; // 5% to platform
 const LIQUIDITY_ALLOCATION = (TOTAL_SUPPLY * 90n) / 100n; // 90% to bonding curve
 
-const HARDCODED_CID = "bafkreifpymts2rinunnptk6pejo3znkuag7yevcty2qmuhuu7jmglmyo34";
 
 async function main() {
   const argv = process.argv.slice(2);

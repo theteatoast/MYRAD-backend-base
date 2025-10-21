@@ -1,56 +1,57 @@
-const axios = require("axios");
-const FormData = require("form-data");
+const lighthouse = require("@lighthouse-web3/sdk");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 const LIGHTHOUSE_API_KEY = process.env.LIGHTHOUSE_API_KEY;
-const LIGHTHOUSE_API_URL = "https://node.lighthouse.storage/api/v0/add";
 
-/**
- * Upload file to Lighthouse IPFS and return CID
- * @param {Buffer} fileBuffer - File buffer to upload
- * @param {string} fileName - Original filename
- * @returns {Promise<string>} - IPFS CID
- */
 async function uploadToLighthouse(fileBuffer, fileName) {
+  let tempFilePath = null;
+  
   try {
     if (!LIGHTHOUSE_API_KEY) {
-      throw new Error("LIGHTHOUSE_API_KEY not configured");
+      throw new Error("LIGHTHOUSE_API_KEY not configured in .env file");
     }
 
-    const form = new FormData();
-    form.append("file", fileBuffer, fileName);
+    console.log(`📤 Uploading to Lighthouse IPFS (using SDK): ${fileName} (${(fileBuffer.length / 1024 / 1024).toFixed(2)} MB)`);
 
-    const response = await axios.post(LIGHTHOUSE_API_URL, form, {
-      headers: {
-        ...form.getHeaders(),
-        Authorization: `Bearer ${LIGHTHOUSE_API_KEY}`,
-      },
-      timeout: 60000,
-    });
+    tempFilePath = path.join(os.tmpdir(), `lighthouse-upload-${Date.now()}-${fileName}`);
+    fs.writeFileSync(tempFilePath, fileBuffer);
 
-    if (response.data && response.data.Hash) {
-      const cid = response.data.Hash;
+    console.log(`   Temporary file created: ${tempFilePath}`);
+    console.log(`   Uploading to Lighthouse...`);
+
+    const uploadResponse = await lighthouse.upload(tempFilePath, LIGHTHOUSE_API_KEY);
+
+    if (uploadResponse && uploadResponse.data && uploadResponse.data.Hash) {
+      const cid = uploadResponse.data.Hash;
       console.log(`✅ File uploaded to IPFS: ${cid}`);
+      console.log(`   Gateway URL: https://gateway.lighthouse.storage/ipfs/${cid}`);
       return cid;
     } else {
+      console.error("❌ Unexpected Lighthouse response:", uploadResponse);
       throw new Error("No CID returned from Lighthouse");
     }
   } catch (err) {
-    console.error("❌ Lighthouse upload failed:", err.message);
+    console.error("❌ Lighthouse upload failed:", {
+      message: err.message,
+      stack: err.stack
+    });
     throw new Error(`Upload failed: ${err.message}`);
+  } finally {
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+        console.log(`   Temp file cleaned up`);
+      } catch (cleanupErr) {
+        console.warn(`⚠️  Could not delete temp file: ${cleanupErr.message}`);
+      }
+    }
   }
 }
 
-/**
- * Upload file from base64 encoded data
- * @param {string} base64Data - Base64 encoded file data
- * @param {string} fileName - Original filename
- * @returns {Promise<string>} - IPFS CID
- */
 async function uploadBase64ToLighthouse(base64Data, fileName) {
   try {
-    // Convert base64 to buffer
     const buffer = Buffer.from(base64Data, "base64");
     return await uploadToLighthouse(buffer, fileName);
   } catch (err) {
